@@ -598,13 +598,29 @@ function ResultsScreen({event,roster,responses,lottery,onBack}){
   const noReply=er.filter(r=>!responses[r.id]);
 
   function genText(){
-    const L=[`⚽ 【駐車場抽選結果】`,event?.title&&`📌 ${event.title}`,event?.matchDate&&`🗓 ${fmtDate(event.matchDate)}`,""];
-    if(confirmedMembers.length){L.push(`🔒 【確定枠 ${confirmedMembers.length}名】`);confirmedMembers.forEach(w=>L.push(`  🔒 #${w.num} ${w.name}`));L.push("")}
-    L.push(`🚗 【当選 ${winners.length}名】`);winners.forEach(w=>L.push(`  ✅ #${w.num} ${w.name}`));L.push("");
-    if(losers.length){L.push(`😢 【落選 ${losers.length}名】`);losers.forEach(l=>L.push(`  ❌ #${l.num} ${l.name}`));L.push("")}
-    if(walkers.length){L.push(`🚶 【徒歩参加 ${walkers.length}名】`);walkers.forEach(a=>L.push(`  #${a.num} ${a.name}`));L.push("")}
-    if(absent.length){L.push(`🏠 【欠席 ${absent.length}名】`);absent.forEach(a=>L.push(`  #${a.num} ${a.name}`));L.push("")}
-    if(noReply.length){L.push(`📭 【未回答 ${noReply.length}名】`);noReply.forEach(n=>L.push(`  #${n.num} ${n.name}`))}
+    const L=[`⚽ 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`,"━━━━━━━━━━━━"];
+    if(confirmedMembers.length||winners.length){
+      L.push(`🚗 【車を出す方】`);
+      if(confirmedMembers.length) L.push(` 🔒確定: `+confirmedMembers.map(w=>w.name).join(", "));
+      if(winners.length) L.push(` 🎯当選: `+winners.map(w=>w.name).join(", "));
+      L.push("━━━━━━━━━━━━");
+    }
+    if(losers.length){
+      L.push(`💧 【落選（乗り合わせ等）】`);
+      L.push(` ❌ `+losers.map(l=>l.name).join(", "));
+      L.push("━━━━━━━━━━━━");
+    }
+    if(walkers.length){
+      L.push(`🚶 【車なし / 徒歩参加】`);
+      L.push(` `+walkers.map(a=>a.name).join(", "));
+      L.push("━━━━━━━━━━━━");
+    }
+    if(absent.length||noReply.length){
+      L.push(`🏠 【欠席 / 未回答】`);
+      if(absent.length) L.push(` 欠席: `+absent.map(a=>a.name).join(", "));
+      if(noReply.length) L.push(` 未回答: `+noReply.map(n=>n.name).join(", "));
+      L.push("━━━━━━━━━━━━");
+    }
     return L.filter(l=>l!==false).join("\n");
   }
   function share(){
