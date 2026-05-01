@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>⚽ 駐車場抽選</title>
+  <meta name="description" content="サッカーチームの駐車場抽選アプリ">
+  <meta property="og:title" content="⚽ 駐車場抽選">
+  <meta property="og:description" content="サッカーの試合時の駐車場抽選アプリ">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#071e07">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body,#root{height:100%}
+    body{font-family:'Noto Sans JP',sans-serif;background:#071e07;color:#fff;-webkit-font-smoothing:antialiased}
+    input,select,button{font-family:inherit}
+    input::placeholder{color:rgba(255,255,255,0.25)}
+    select option{background:#0a2a0a;color:#fff}
+    input[type=datetime-local]::-webkit-calendar-picker-indicator{filter:invert(0.7)}
+    @keyframes spFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .fade-in{animation:fadeIn .3s ease-out}
+    ::-webkit-scrollbar{width:4px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:2px}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+const{useState,useEffect,useRef,useCallback}=React;
+
+// ── Firebase ──
+const FB="https://soccer-parking-default-rtdb.asia-southeast1.firebasedatabase.app";
+async function fbGet(p){try{const r=await fetch(`${FB}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbGet:",e);return undefined}}
+async function fbSet(p,v){try{await fetch(`${FB}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbSet:",e)}}
+async function fbDel(p){try{await fetch(`${FB}/${p}.json`,{method:"DELETE"})}catch(e){console.error("fbDel:",e)}}
+function uid(){return Math.random().toString(36).slice(2,9)}
+
+// ── Default ──
+const DEFAULT_ROSTER=[
+  {id:uid(),num:4,name:"はるか",grade:"4年"},{id:uid(),num:6,name:"えいた",grade:"4年"},
+  {id:uid(),num:7,name:"ゆうと",grade:"4年"},{id:uid(),num:9,name:"はる",grade:"4年"},
+  {id:uid(),num:10,name:"しょう",grade:"4年"},{id:uid(),num:11,name:"いつき",grade:"4年"},
+  {id:uid(),num:13,name:"はると",grade:"4年"},{id:uid(),num:15,name:"そうご",grade:"4年"},
+  {id:uid(),num:16,name:"はると",grade:"4年"},{id:uid(),num:17,name:"れい",grade:"4年"},
+  {id:uid(),num:18,name:"りょうま",grade:"4年"},{id:uid(),num:19,name:"プラヤヌ",grade:"4年"},
+  {id:uid(),num:20,name:"りょうた",grade:"4年"},{id:uid(),num:21,name:"いつき",grade:"4年"},
+  {id:uid(),num:22,name:"はるた",grade:"4年"},{id:uid(),num:23,name:"ゆうま",grade:"4年"},
+  {id:uid(),num:24,name:"ななせ",grade:"4年"},{id:uid(),num:25,name:"えいと",grade:"4年"},
+  {id:uid(),num:26,name:"こうた",grade:"4年"},
+];
+
+// ── Design ──
+const C={bg:"#071e07",bg2:"#0d2b0d",card:"rgba(255,255,255,0.07)",cardBorder:"rgba(255,255,255,0.12)",lime:"#84cc16",limeLight:"#a3e635",amber:"#f59e0b",rose:"#e11d48",sky:"#38bdf8",muted:"rgba(255,255,255,0.45)",dim:"rgba(255,255,255,0.25)",faint:"rgba(255,255,255,0.15)"};
+const S={
+  card:{background:C.card,border:`1px solid ${C.cardBorder}`,borderRadius:16,padding:16,marginBottom:12},
+  cardAmber:{background:"rgba(245,158,11,0.07)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:16,padding:16,marginBottom:12},
+  cardLime:{background:"rgba(132,204,22,0.05)",border:"1px solid rgba(132,204,22,0.35)",borderRadius:16,padding:16,marginBottom:12},
+  cardLock:{background:"rgba(56,189,248,0.05)",border:"1px solid rgba(56,189,248,0.3)",borderRadius:16,padding:16,marginBottom:12},
+  input:{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"10px 14px",color:"#fff",fontSize:14,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"inherit"},
+  select:{background:"#0a2a0a",border:"1px solid rgba(255,255,255,0.25)",borderRadius:12,padding:"12px 16px",color:"#fff",fontSize:16,outline:"none",width:"100%",boxSizing:"border-box",appearance:"none",fontFamily:"inherit"},
+  btnP:{background:C.lime,color:"#052e16",border:"none",borderRadius:16,padding:"14px 20px",fontSize:16,fontWeight:700,cursor:"pointer",width:"100%",fontFamily:"inherit",display:"block",textAlign:"center"},
+  btnG:{background:"rgba(255,255,255,0.1)",color:"#fff",border:"none",borderRadius:16,padding:"14px 20px",fontSize:16,fontWeight:700,cursor:"pointer",width:"100%",fontFamily:"inherit",display:"block",textAlign:"center"},
+  btnY:{background:C.amber,color:"#052e16",border:"none",borderRadius:16,padding:"14px 20px",fontSize:16,fontWeight:700,cursor:"pointer",width:"100%",fontFamily:"inherit",display:"block",textAlign:"center"},
+  btnSm:{background:"rgba(255,255,255,0.1)",color:"#fff",border:"none",borderRadius:12,padding:"8px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"},
+  btnSmY:{background:C.amber,color:"#052e16",border:"none",borderRadius:12,padding:"8px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"},
+  btnSmO:{background:"transparent",color:C.limeLight,border:"2px solid rgba(132,204,22,0.4)",borderRadius:12,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"},
+  stat:{background:"rgba(0,0,0,0.25)",borderRadius:12,padding:"10px 6px",textAlign:"center",flex:1},
+  row:{display:"flex",alignItems:"center",justifyContent:"space-between"},
+  choice:(sel,color)=>{const m={lime:{bg:C.lime,t:"#052e16"},rose:{bg:C.rose,t:"#fff"},amber:{bg:C.amber,t:"#052e16"}}[color];return sel?{background:m.bg,color:m.t,border:"none",borderRadius:12,padding:"12px 8px",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",flex:1,transition:"all .2s"}:{background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",border:"none",borderRadius:12,padding:"12px 8px",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",flex:1,transition:"all .2s"}},
+};
+
+function fmtDate(iso){if(!iso)return"";return new Date(iso).toLocaleDateString("ja-JP",{month:"short",day:"numeric",weekday:"short"})}
+function fmtDateTime(iso){if(!iso)return"";const d=new Date(iso);return d.toLocaleDateString("ja-JP",{month:"short",day:"numeric",weekday:"short"})+" "+d.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}
+function getTimeLeft(dl){const d=new Date(dl)-new Date();if(d<=0)return null;const h=Math.floor(d/3600000),m=Math.floor((d%3600000)/60000);if(h>=24)return`${Math.floor(h/24)}日後`;if(h>0)return`${h}時間${m}分`;return`${m}分`}
+function getEventRoster(roster,ev){const g=ev.inviteGrades||[...new Set(roster.map(r=>r.grade||"4年"))];return roster.filter(r=>g.includes(r.grade||"4年"))}
+function getConfirmed(ev){return ev.confirmedParking||[]}
+function getLotterySlots(ev){return Math.max(0,(ev.parkingLimit||0)-getConfirmed(ev).length)}
+
+// ── Components ──
+function Btn({children,onClick,variant="primary",disabled,style:ex}){
+  const base=variant==="yellow"?S.btnY:variant==="ghost"?S.btnG:S.btnP;
+  return <button onClick={onClick} disabled={disabled} style={{...base,opacity:disabled?.4:1,cursor:disabled?"not-allowed":"pointer",...ex}}>{children}</button>;
+}
+function Tag({label,color="white"}){
+  const m={lime:{bg:"rgba(132,204,22,0.15)",t:"#a3e635"},amber:{bg:"rgba(245,158,11,0.15)",t:"#fbbf24"},red:{bg:"rgba(239,68,68,0.15)",t:"#f87171"},gray:{bg:"rgba(255,255,255,0.06)",t:"rgba(255,255,255,0.3)"},sky:{bg:"rgba(56,189,248,0.15)",t:"#38bdf8"},white:{bg:"rgba(255,255,255,0.1)",t:"rgba(255,255,255,0.6)"}}[color]||{bg:"rgba(255,255,255,0.1)",t:"rgba(255,255,255,0.6)"};
+  return <span style={{background:m.bg,color:m.t,borderRadius:999,padding:"2px 8px",fontSize:11,whiteSpace:"nowrap",display:"inline-block"}}>{label}</span>;
+}
+function ErrMsg({msg}){if(!msg)return null;return<p style={{color:"#f87171",background:"rgba(239,68,68,0.1)",borderRadius:12,padding:"8px 14px",textAlign:"center",fontSize:14,margin:"8px 0"}}>{msg}</p>}
+function FlashMsg({msg}){if(!msg)return null;return<p style={{color:C.limeLight,background:"rgba(132,204,22,0.1)",borderRadius:12,padding:"8px 14px",textAlign:"center",fontSize:14,margin:"8px 0"}}>{msg}</p>}
+function BackBar({title,onBack,label="← 戻る"}){
+  return(<div style={{display:"flex",alignItems:"center",gap:0,marginBottom:20,background:"rgba(0,0,0,0.3)",borderRadius:16,padding:"4px"}}>
+    <button onClick={onBack} style={{background:"none",border:"none",color:"rgba(255,255,255,0.6)",fontSize:14,cursor:"pointer",padding:"10px 16px",fontFamily:"inherit",fontWeight:700,borderRadius:12,flexShrink:0,whiteSpace:"nowrap"}}>{label}</button>
+    <div style={{flex:1,textAlign:"center",fontWeight:900,fontSize:16,color:"#fff",paddingRight:16}}>{title}</div>
+  </div>);
+}
+
+// ── HOME ──
+function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent,loading}){
+  const[,tick]=useState(0);
+  useEffect(()=>{const t=setInterval(()=>tick(x=>x+1),30000);return()=>clearInterval(t)},[]);
+  const now=new Date();
+  const sorted=[...events].sort((a,b)=>new Date(b.matchDate||0)-new Date(a.matchDate||0));
+  const recent=sorted.filter(e=>!e.matchDate||new Date(e.matchDate)>=new Date(now-3*86400000));
+  const archive=sorted.filter(e=>e.matchDate&&new Date(e.matchDate)<new Date(now-3*86400000));
+  const[showArchive,setShowArchive]=useState(false);
+
+  function renderEvent(ev){
+    const er=getEventRoster(roster,ev);
+    const resp=allResponses[ev.id]||{};
+    const lott=allLotteries[ev.id]||null;
+    const answered=Object.keys(resp).filter(id=>er.find(r=>r.id===id)).length;
+    const hopefuls=Object.values(resp).filter(r=>r.attending&&r.parkingNeeded).length;
+    const confirmed=getConfirmed(ev).length;
+    const lottSlots=getLotterySlots(ev);
+    const isPast=ev.deadline&&now>new Date(ev.deadline);
+    const tl=ev.deadline&&!isPast?getTimeLeft(ev.deadline):null;
+    let badge=null,bc=C.cardBorder;
+    if(lott?.conducted){badge=<Tag label="✅ 抽選完了" color="lime"/>;bc="rgba(132,204,22,0.4)"}
+    else if(isPast&&hopefuls>lottSlots&&lottSlots>0){badge=<Tag label="⚠️ 抽選待ち" color="amber"/>;bc="rgba(245,158,11,0.4)"}
+    else if(isPast&&hopefuls>0&&hopefuls<=lottSlots){badge=<Tag label="✅ 全員OK" color="lime"/>;bc="rgba(132,204,22,0.3)"}
+    else if(isPast){badge=<Tag label="締切済" color="gray"/>}
+    else if(tl){badge=<Tag label={`⏱ ${tl}`} color="sky"/>}
+    return(
+      <div key={ev.id} className="fade-in" style={{...S.card,borderColor:bc,cursor:"pointer"}} onClick={()=>{onSelectEvent(ev.id);onNav("event")}}>
+        <div style={{...S.row,marginBottom:10}}>
+          <div><div style={{fontWeight:900,fontSize:16}}>{ev.title}</div>
+            {ev.matchDate&&<div style={{color:C.limeLight,fontSize:12,fontWeight:700,marginTop:2}}>🗓 {fmtDate(ev.matchDate)}</div>}
+          </div>{badge}
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <div style={S.stat}><div style={{fontSize:18,fontWeight:900}}>{answered}<span style={{fontSize:11,color:C.dim}}>/{er.length}名</span></div><div style={{fontSize:11,color:C.muted}}>回答済み</div></div>
+          <div style={S.stat}><div style={{fontSize:18,fontWeight:900,color:C.amber}}>{hopefuls}</div><div style={{fontSize:11,color:C.muted}}>駐車場希望</div></div>
+          <div style={S.stat}><div style={{fontSize:18,fontWeight:900,color:C.sky}}>{ev.parkingLimit||0}</div><div style={{fontSize:11,color:C.muted}}>台まで可</div></div>
+        </div>
+        {confirmed>0&&<div style={{fontSize:11,color:C.sky,marginBottom:4}}>🔒 確定枠{confirmed}台 ／ 抽選枠{lottSlots}台</div>}
+        {ev.deadline&&<div style={{fontSize:11,color:C.dim}}>締切: {fmtDateTime(ev.deadline)}</div>}
+      </div>
+    );
+  }
+
+  return(<div>
+    <div style={{textAlign:"center",padding:"28px 0 20px"}}>
+      <div style={{fontSize:52,marginBottom:10,display:"inline-block",animation:"spFloat 3s ease-in-out infinite"}}>⚽</div>
+      <h1 style={{fontSize:26,fontWeight:900,margin:0}}>駐車場 抽選</h1>
+      <p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:13}}>Soccer Parking Lottery</p>
+    </div>
+    {loading?<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>読み込み中...</div>
+    :recent.length===0&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
+      <div style={{fontSize:40,marginBottom:12}}>📅</div>
+      <p style={{color:C.muted,marginBottom:6}}>試合がまだ登録されていません</p>
+      <p style={{color:C.dim,fontSize:12}}>管理者が試合を追加するまでお待ちください</p>
+    </div>
+    :<>{recent.map(renderEvent)}
+      {archive.length>0&&<div style={{marginTop:16}}>
+        <button onClick={()=>setShowArchive(!showArchive)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 24px",color:"rgba(255,255,255,0.35)",fontSize:13,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
+          📦 過去の試合 ({archive.length}件) {showArchive?"▲":"▼"}
+        </button>
+        {showArchive&&<div style={{marginTop:8}}>{archive.map(renderEvent)}</div>}
+      </div>}
+    </>}
+    <div style={{marginTop:24,textAlign:"center"}}>
+      <button onClick={()=>onNav("admin")} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 24px",color:"rgba(255,255,255,0.35)",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>⚙️ 管理者メニュー</button>
+    </div>
+  </div>);
+}
+// ── EVENT SCREEN ──
+function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
+  const er=getEventRoster(roster,event||{});
+  const myKey="parkingApp_myId";
+  const[memberId,setMemberId]=useState(()=>localStorage.getItem(myKey)||"");
+  const[attending,setAttending]=useState(null);
+  const[parking,setParking]=useState(null);
+  const[err,setErr]=useState("");
+  const[saving,setSaving]=useState(false);
+  const[done,setDone]=useState(false);
+  const[editing,setEditing]=useState(false);
+
+  useEffect(()=>{
+    const saved=localStorage.getItem(myKey);
+    if(saved&&er.find(r=>r.id===saved)){
+      setMemberId(saved);
+      const prev=responses[saved];
+      if(prev){setAttending(prev.attending);setParking(prev.parkingNeeded||false)}
+    }
+  },[event?.id]);
+
+  if(!event)return null;
+  const isPast=event.deadline&&new Date()>new Date(event.deadline);
+  const tl=event.deadline&&!isPast?getTimeLeft(event.deadline):null;
+  const limit=event.parkingLimit||0;
+  const confirmed=getConfirmed(event);
+  const lottSlots=getLotterySlots(event);
+  const confirmedMembers=confirmed.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
+  const hopefuls=Object.entries(responses).filter(([id,r])=>r.attending&&r.parkingNeeded&&!confirmed.includes(id));
+  const answered=Object.keys(responses).filter(id=>er.find(r=>r.id===id)).length;
+  const unanswered=er.filter(r=>!responses[r.id]);
+  const myResp=memberId?responses[memberId]:null;
+  const isConfirmed=confirmed.includes(memberId);
+
+  function selectMember(id){setMemberId(id);localStorage.setItem(myKey,id);
+    const prev=responses[id];
+    if(prev){setAttending(prev.attending);setParking(prev.parkingNeeded||false)}
+    else{setAttending(null);setParking(null)}
+    setEditing(false);setDone(false);
+  }
+
+  async function doSubmit(){
+    if(!memberId)return setErr("名前を選んでください");
+    if(attending===null)return setErr("参加の有無を選んでください");
+    if(attending&&parking===null)return setErr("駐車場の希望を選んでください");
+    setErr("");setSaving(true);
+    await onSubmit(event.id,{memberId,attending,parkingNeeded:attending?parking:false});
+    setSaving(false);setDone(true);setEditing(false);
+  }
+
+  function copyReminder(){
+    const names=unanswered.map(r=>`#${r.num} ${r.name}`).join(", ");
+    const txt=`📢 【${event.title}】回答お願いします！\n\n未回答: ${names}\n\n締切: ${event.deadline?fmtDateTime(event.deadline):"未設定"}`;
+    if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
+    else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{})}
+  }
+
+  const showForm=!myResp||editing;
+
+  return(<div>
+    <BackBar title={event.title} onBack={onBack} label="← 一覧"/>
+    <div style={{display:"flex",gap:8,marginBottom:12}}>
+      {[{n:answered,of:er.length,l:"回答済み",c:C.limeLight},{n:hopefuls.length,of:lottSlots,l:"駐車場希望",c:C.amber},{n:limit,of:null,l:"上限台数",c:C.sky}].map(({n,of,l,c})=>
+        <div key={l} style={S.stat}><div style={{fontSize:20,fontWeight:900,color:c}}>{n}{of!=null&&<span style={{fontSize:11,color:C.dim}}>/{of}</span>}</div><div style={{fontSize:11,color:C.muted,lineHeight:1.3}}>{l}</div></div>
+      )}
+    </div>
+
+    {confirmed.length>0&&<div style={S.cardLock}>
+      <div style={{fontWeight:700,color:C.sky,marginBottom:8,fontSize:13}}>🔒 確定枠 {confirmed.length}台</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+        {confirmedMembers.map(m=><Tag key={m.id} label={`#${m.num} ${m.name}`} color="sky"/>)}
+      </div>
+      <div style={{fontSize:11,color:C.dim,marginTop:8}}>抽選枠: {lottSlots}台</div>
+    </div>}
+
+    {event.deadline&&<div style={{...S.card,display:"flex",justifyContent:"space-between",alignItems:"center",borderColor:isPast?"rgba(239,68,68,0.35)":"rgba(132,204,22,0.3)"}}>
+      <div><div style={{fontSize:12,color:C.dim}}>回答締切</div><div style={{fontWeight:700,fontSize:14}}>{fmtDateTime(event.deadline)}</div></div>
+      {isPast?<Tag label="締切済み" color="red"/>:tl?<span style={{color:C.limeLight,fontWeight:700,fontSize:14}}>⏱ 残り {tl}</span>:null}
+    </div>}
+
+    {lottery?.conducted&&<Btn variant="yellow" onClick={()=>onNav("results")} style={{marginBottom:12}}>🎉 抽選結果を見る</Btn>}
+
+    {/* Registration section */}
+    {!lottery?.conducted&&<div style={{...S.card,borderColor:"rgba(132,204,22,0.3)"}}>
+      <div style={{fontSize:14,fontWeight:900,color:C.limeLight,marginBottom:12}}>✏️ 参加登録{isPast?" (締切後)":""}</div>
+      {isPast&&<p style={{color:C.amber,fontSize:12,marginBottom:8}}>⚠️ 締切を過ぎていますが登録できます</p>}
+
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:12,color:C.muted,marginBottom:6}}>👦 選手を選んでください</div>
+        <select value={memberId} onChange={e=>selectMember(e.target.value)} style={S.select}>
+          <option value="">─ 選んでください ─</option>
+          {er.map(r=><option key={r.id} value={r.id}>#{r.num} {r.name} ({r.grade||"4年"}){responses[r.id]?" ✓":""}{confirmed.includes(r.id)?" 🔒":""}</option>)}
+        </select>
+      </div>
+
+      {memberId&&isConfirmed&&<div style={{...S.cardLock,margin:"0 0 12px"}}>
+        <p style={{color:C.sky,fontWeight:700,fontSize:14}}>🔒 駐車場確定枠です</p>
+        <p style={{color:C.dim,fontSize:12}}>抽選なしで駐車場を利用できます</p>
+      </div>}
+
+      {memberId&&myResp&&!editing&&<div style={{background:"rgba(132,204,22,0.08)",borderRadius:12,padding:12,marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <span style={{fontSize:13}}>{myResp.attending?"✅ 参加":"❌ 欠席"}</span>
+            {myResp.attending&&<span style={{fontSize:13,marginLeft:8}}>{myResp.parkingNeeded?"🚗 駐車場希望":"🚶 駐車場不要"}</span>}
+          </div>
+          <button onClick={()=>setEditing(true)} style={S.btnSm}>変更</button>
+        </div>
+        {done&&<p style={{color:C.limeLight,fontSize:12,marginTop:6}}>✅ 登録しました！</p>}
+      </div>}
+
+      {memberId&&showForm&&<>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>⚽ 試合に参加しますか？</div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setAttending(true)} style={S.choice(attending===true,"lime")}>✅ 参加する</button>
+            <button onClick={()=>{setAttending(false);setParking(false)}} style={S.choice(attending===false,"rose")}>❌ 欠席</button>
+          </div>
+        </div>
+        {attending===true&&!isConfirmed&&<div style={{marginBottom:12}} className="fade-in">
+          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🚗 駐車場を希望しますか？</div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setParking(true)} style={S.choice(parking===true,"amber")}>🚗 希望する</button>
+            <button onClick={()=>setParking(false)} style={S.choice(parking===false,"lime")}>🚶 不要です</button>
+          </div>
+          <p style={{fontSize:12,color:C.dim,textAlign:"center",marginTop:8}}>抽選枠 {lottSlots}台・超過時はあみだくじ</p>
+        </div>}
+        <ErrMsg msg={err}/>
+        <Btn onClick={doSubmit} disabled={saving||!memberId||attending===null||(attending&&!isConfirmed&&parking===null)}>{saving?"送信中...":myResp?"変更を保存 →":"登録する →"}</Btn>
+        {editing&&<Btn variant="ghost" onClick={()=>setEditing(false)} style={{marginTop:8}}>キャンセル</Btn>}
+      </>}
+    </div>}
+
+    {!lottery?.conducted&&hopefuls.length>lottSlots&&lottSlots>0&&<div style={{...S.cardAmber,textAlign:"center",marginTop:8}}>
+      <p style={{color:C.amber,fontWeight:700,marginBottom:4}}>⚠️ 抽選が必要です</p>
+      <p style={{color:C.muted,fontSize:12,marginBottom:12}}>希望 {hopefuls.length}名 ＞ 抽選枠 {lottSlots}台</p>
+      <Btn variant="yellow" onClick={()=>onNav("admin")}>🎰 管理者画面で抽選する</Btn>
+    </div>}
+
+    {!lottery?.conducted&&hopefuls.length>0&&hopefuls.length<=lottSlots&&<div style={{...S.cardLime,textAlign:"center",marginTop:8}}>
+      <p style={{color:C.limeLight,fontWeight:700}}>✅ 全員分の駐車場が確保できます</p>
+      <p style={{color:C.dim,fontSize:12}}>希望 {hopefuls.length}名 ≤ {lottSlots}台</p>
+    </div>}
+
+    {unanswered.length>0&&<div style={{...S.card,marginTop:8}}>
+      <div style={{...S.row,marginBottom:8}}>
+        <div style={{fontSize:12,color:C.dim}}>📭 未回答 {unanswered.length}名</div>
+        <button onClick={copyReminder} style={S.btnSm}>📢 催促テキスト</button>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{unanswered.map(r=><Tag key={r.id} label={`#${r.num} ${r.name}`} color="gray"/>)}</div>
+    </div>}
+  </div>);
+}
+// ── ADMIN SCREEN ──
+function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSaveEvent,onDeleteEvent,onSaveRoster,onRunLottery,onResetResponses,onBack,onNav}){
+  const[tab,setTab]=useState("events");
+  const[msg,setMsg]=useState("");
+  const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),3000)};
+  const[modal,setModal]=useState(null);
+  function confirm(m){return new Promise(res=>{setModal({m,ok:()=>{setModal(null);res(true)},no:()=>{setModal(null);res(false)}})})}
+
+  // Roster
+  const[rosterRows,setRosterRows]=useState(null);
+  const[rosterDirty,setRosterDirty]=useState(false);
+  const inputRefs=useRef({});
+  const endRef=useRef(null);
+  const allGrades=[...new Set(roster.map(r=>r.grade||"4年"))].sort();
+
+  useEffect(()=>{if(tab==="roster"&&rosterRows===null)setRosterRows(roster.map(r=>({...r})))},[tab,roster]);
+
+  function addRow(){const nr={id:uid(),num:"",name:"",grade:allGrades[0]||"4年"};setRosterRows(r=>[...r,nr]);setRosterDirty(true);
+    setTimeout(()=>{inputRefs.current[`num_${nr.id}`]?.focus();endRef.current?.scrollIntoView({behavior:"smooth"})},50)}
+  function removeRow(id){setRosterRows(r=>r.filter(x=>x.id!==id));setRosterDirty(true)}
+  function updateRow(id,f,v){setRosterRows(r=>r.map(x=>x.id===id?{...x,[f]:v}:x));setRosterDirty(true)}
+  async function saveRoster(){const v=rosterRows.filter(r=>r.name.trim());if(!v.length)return flash("⚠️ 名前を入力");await onSaveRoster(v);setRosterDirty(false);flash("✅ 保存しました！")}
+  function discardRoster(){setRosterRows(roster.map(r=>({...r})));setRosterDirty(false);flash("↺ 元に戻しました")}
+
+  // Event edit
+  const[editEv,setEditEv]=useState(null);
+  const[evLimit,setEvLimit]=useState(5);
+  const[evErr,setEvErr]=useState("");
+  const[evDirty,setEvDirty]=useState(false);
+  const[evConfirmed,setEvConfirmed]=useState([]);
+  const[evGrades,setEvGrades]=useState([]);
+
+  function startEdit(ev){setEditEv({...ev});setEvLimit(ev.parkingLimit||5);setEvConfirmed(ev.confirmedParking||[]);setEvGrades(ev.inviteGrades||[...allGrades]);setEvErr("");setEvDirty(false)}
+  function startNew(){const id=uid();setEditEv({_new:true,id,title:"",matchDate:"",deadline:"",parkingLimit:5});setEvLimit(5);setEvConfirmed([]);setEvGrades([...allGrades]);setEvErr("");setEvDirty(false)}
+  function updateEv(f,v){setEditEv(p=>({...p,[f]:v}));setEvDirty(true)}
+  function toggleGrade(g){setEvGrades(p=>p.includes(g)?p.filter(x=>x!==g):[...p,g]);setEvDirty(true)}
+  function toggleConfirmed(id){setEvConfirmed(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);setEvDirty(true)}
+
+  async function saveEditEv(){
+    if(!editEv.title.trim()){setEvErr("⚠️ タイトルを入力");return}
+    if(evGrades.length===0){setEvErr("⚠️ 参加対象を選択");return}
+    await onSaveEvent({...editEv,parkingLimit:evLimit,confirmedParking:evConfirmed,inviteGrades:evGrades,_new:undefined});
+    setEditEv(null);setEvDirty(false);flash("✅ 保存しました！")}
+  async function cancelEditEv(){if(evDirty){const ok=await confirm("編集を破棄しますか？");if(!ok)return}setEditEv(null);setEvErr("")}
+
+  async function changeTab(t){
+    if(t===tab)return;
+    if(tab==="events"&&editEv&&evDirty){const ok=await confirm("編集を破棄しますか？");if(!ok)return;setEditEv(null)}
+    if(tab==="roster"&&rosterDirty){const ok=await confirm("名簿の変更を破棄しますか？");if(!ok)return;setRosterRows(null);setRosterDirty(false)}
+    setTab(t)}
+
+  async function handleBack(){
+    if((tab==="events"&&editEv&&evDirty)||(tab==="roster"&&rosterDirty)){const ok=await confirm("保存せずに戻りますか？");if(!ok)return}
+    onBack()}
+
+  const TABS=[["events","📅 試合"],["roster","👦 名簿"],["check","📋 回答"]];
+  const evRoster=editEv?roster.filter(r=>(evGrades||allGrades).includes(r.grade||"4年")):[];
+
+  if(editEv)return(<div>
+    <BackBar title={editEv._new?"試合を追加":"試合を編集"} onBack={cancelEditEv} label="← キャンセル"/>
+    {evDirty&&<p style={{textAlign:"center",fontSize:11,color:C.amber,marginBottom:8}}>● 未保存の変更</p>}
+    <div style={S.card}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:6}}>タイトル</div>
+      <input value={editEv.title} onChange={e=>updateEv("title",e.target.value)} placeholder="例：土曜 練習試合" style={S.input} autoComplete="off"/>
+    </div>
+    {[["試合日時","matchDate"],["回答締切","deadline"]].map(([l,k])=><div key={k} style={S.card}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:6}}>{l}（任意）</div>
+      <input type="datetime-local" value={editEv[k]||""} onChange={e=>updateEv(k,e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
+      {editEv[k]&&<button onClick={()=>updateEv(k,"")} style={{background:"none",border:"none",color:C.dim,fontSize:12,cursor:"pointer",marginTop:4}}>× クリア</button>}
+    </div>)}
+    <div style={S.card}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:12}}>🚗 駐車場の台数上限</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:24}}>
+        <button onClick={()=>{setEvLimit(l=>Math.max(1,l-1));setEvDirty(true)}} style={{width:52,height:52,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:28,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+        <span style={{fontSize:52,fontWeight:900,color:C.limeLight,width:64,textAlign:"center"}}>{evLimit}</span>
+        <button onClick={()=>{setEvLimit(l=>l+1);setEvDirty(true)}} style={{width:52,height:52,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:28,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>＋</button>
+      </div>
+    </div>
+
+    {allGrades.length>1&&<div style={S.card}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:10}}>📋 参加対象</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {allGrades.map(g=><button key={g} onClick={()=>toggleGrade(g)} style={{padding:"8px 16px",borderRadius:12,border:"none",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:evGrades.includes(g)?C.lime:"rgba(255,255,255,0.08)",color:evGrades.includes(g)?"#052e16":"rgba(255,255,255,0.5)",transition:"all .2s"}}>{g} {evGrades.includes(g)?"✓":""}</button>)}
+      </div>
+    </div>}
+
+    <div style={S.card}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:10}}>🔒 確定枠（抽選なしで駐車場確定）</div>
+      {evRoster.length===0?<p style={{color:C.dim,fontSize:13}}>対象メンバーがいません</p>
+      :<div style={{maxHeight:200,overflowY:"auto"}}>{evRoster.map(r=><div key={r.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",marginBottom:4,background:evConfirmed.includes(r.id)?"rgba(56,189,248,0.1)":"rgba(255,255,255,0.04)",borderRadius:10,cursor:"pointer",transition:"all .2s"}} onClick={()=>toggleConfirmed(r.id)}>
+        <span style={{fontSize:13}}><span style={{color:C.dim,fontSize:11}}>#{r.num} </span>{r.name}<span style={{color:C.dim,fontSize:11}}> ({r.grade||"4年"})</span></span>
+        {evConfirmed.includes(r.id)?<Tag label="🔒 確定" color="sky"/>:<span style={{color:C.faint,fontSize:12}}>タップで確定</span>}
+      </div>)}</div>}
+      <div style={{fontSize:12,color:C.sky,marginTop:8,fontWeight:700}}>確定: {evConfirmed.length}台 ／ 抽選枠: {Math.max(0,evLimit-evConfirmed.length)}台</div>
+    </div>
+
+    <ErrMsg msg={evErr}/>
+    <Btn onClick={saveEditEv} style={{marginBottom:8}}>💾 保存する</Btn>
+    <Btn variant="ghost" onClick={cancelEditEv}>キャンセル</Btn>
+  </div>);
+
+  return(<div>
+    <BackBar title="⚙️ 管理者メニュー" onBack={handleBack} label="← TOP"/>
+    <div style={{display:"flex",background:"rgba(0,0,0,0.3)",borderRadius:16,padding:4,gap:4,marginBottom:16}}>
+      {TABS.map(([k,l])=><button key={k} onClick={()=>changeTab(k)} style={{flex:1,padding:"10px 4px",fontSize:13,fontWeight:700,borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",background:tab===k?C.lime:"transparent",color:tab===k?"#052e16":"rgba(255,255,255,0.5)"}}>{l}</button>)}
+    </div>
+    <FlashMsg msg={msg}/>
+
+    {tab==="events"&&<div>
+      {events.length===0&&<p style={{textAlign:"center",color:C.dim,padding:"16px 0"}}>試合がまだありません</p>}
+      {[...events].sort((a,b)=>new Date(b.matchDate||0)-new Date(a.matchDate||0)).map(ev=>{
+        const resp=allResponses[ev.id]||{};const lott=allLotteries[ev.id];
+        const confirmed=getConfirmed(ev);
+        const hopefuls=Object.values(resp).filter(r=>r.attending&&r.parkingNeeded).filter((_,i,a)=>{const id=Object.keys(resp).find(k=>resp[k]===_);return!confirmed.includes(id)}).length;
+        const lottSlots=getLotterySlots(ev);
+        return(<div key={ev.id} style={S.card}>
+          <div style={{...S.row,marginBottom:8}}>
+            <div><div style={{fontWeight:900}}>{ev.title}</div>{ev.matchDate&&<div style={{color:C.limeLight,fontSize:12}}>{fmtDate(ev.matchDate)}</div>}</div>
+            <button onClick={()=>startEdit(ev)} style={{background:"rgba(255,255,255,0.1)",border:"none",color:"#fff",fontSize:12,cursor:"pointer",borderRadius:8,padding:"6px 12px",fontFamily:"inherit"}}>✏️ 編集</button>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
+            <Tag label={`回答 ${Object.keys(resp).length}名`} color="white"/>
+            <Tag label={`希望 ${hopefuls}台`} color="amber"/>
+            <Tag label={`上限 ${ev.parkingLimit}台`} color="sky"/>
+            {confirmed.length>0&&<Tag label={`確定 ${confirmed.length}台`} color="sky"/>}
+            {lott?.conducted&&<Tag label="抽選済み" color="lime"/>}
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {!lott?.conducted&&hopefuls>0&&<button onClick={()=>{onSelectEvent(ev.id);onRunLottery(ev.id)}} style={S.btnSmY}>🎰 抽選{hopefuls>lottSlots?`（${hopefuls}→${lottSlots}台）`:"（全員当選）"}</button>}
+            {lott?.conducted&&<button onClick={()=>{onSelectEvent(ev.id);onNav("results")}} style={S.btnSmO}>結果を見る</button>}
+            <button onClick={async()=>{if(await confirm(`「${ev.title}」をリセット？`))onResetResponses(ev.id)}} style={S.btnSm}>↺ リセット</button>
+            <button onClick={async()=>{if(await confirm(`「${ev.title}」を削除？`))onDeleteEvent(ev.id)}} style={{background:"none",border:"none",color:"rgba(248,113,113,0.7)",fontSize:13,cursor:"pointer",padding:"0 8px"}}>削除</button>
+          </div>
+        </div>)})}
+      <Btn onClick={startNew} style={{marginTop:8}}>＋ 試合を追加する</Btn>
+    </div>}
+
+    {tab==="roster"&&<div>
+      {rosterDirty&&<div style={{background:"rgba(245,158,11,0.1)",border:"1px solid rgba(245,158,11,0.3)",borderRadius:12,padding:"10px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{color:C.amber,fontSize:13,fontWeight:700}}>● 未保存の変更</span>
+        <button onClick={discardRoster} style={{background:"none",border:"none",color:C.dim,fontSize:12,cursor:"pointer"}}>元に戻す</button>
+      </div>}
+      <div style={{maxHeight:"55vh",overflowY:"auto",marginBottom:12}}>
+        {(rosterRows||[]).map((r,i)=><div key={r.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:"8px 10px"}}>
+          <span style={{fontSize:11,color:C.faint,width:18,textAlign:"right",flexShrink:0}}>{i+1}</span>
+          <input ref={el=>{if(el)inputRefs.current[`num_${r.id}`]=el}} value={r.num||""} onChange={e=>updateRow(r.id,"num",e.target.value)} placeholder="#" style={{...S.input,width:48,padding:"8px",textAlign:"center",fontSize:13}}/>
+          <input value={r.name||""} onChange={e=>updateRow(r.id,"name",e.target.value)} placeholder="名前" style={{...S.input,flex:1,padding:"8px 10px",fontSize:14}}/>
+          <select value={r.grade||"4年"} onChange={e=>updateRow(r.id,"grade",e.target.value)} style={{...S.input,width:64,padding:"8px 4px",fontSize:12,textAlign:"center"}}>
+            {[...new Set([...allGrades,r.grade||"4年","3年","4年","5年","6年"])].sort().map(g=><option key={g} value={g}>{g}</option>)}
+          </select>
+          <button onClick={()=>removeRow(r.id)} style={{background:"rgba(239,68,68,0.15)",border:"none",color:"rgba(248,113,113,0.7)",fontSize:16,cursor:"pointer",padding:"6px 10px",borderRadius:8,flexShrink:0}}>×</button>
+        </div>)}
+        <div ref={endRef}/>
+      </div>
+      <button onClick={addRow} style={{background:"rgba(132,204,22,0.1)",border:"1px dashed rgba(132,204,22,0.3)",borderRadius:12,color:C.limeLight,fontSize:14,cursor:"pointer",width:"100%",padding:"12px",marginBottom:12,fontFamily:"inherit"}}>＋ メンバーを追加</button>
+      <Btn onClick={saveRoster} style={{marginBottom:8}}>💾 保存する</Btn>
+      {rosterDirty&&<Btn variant="ghost" onClick={discardRoster}>← 変更を元に戻す</Btn>}
+    </div>}
+
+    {tab==="check"&&<div>
+      {events.length===0&&<p style={{textAlign:"center",color:C.dim}}>試合がありません</p>}
+      {[...events].sort((a,b)=>new Date(b.matchDate||0)-new Date(a.matchDate||0)).map(ev=>{
+        const er=getEventRoster(roster,ev);const resp=allResponses[ev.id]||{};const lott=allLotteries[ev.id];
+        const confirmed=getConfirmed(ev);
+        const hopefuls=Object.entries(resp).filter(([id,r])=>r.attending&&r.parkingNeeded&&!confirmed.includes(id)).length;
+        const lottSlots=getLotterySlots(ev);
+        return(<div key={ev.id} style={S.card}>
+          <div style={{...S.row,marginBottom:10}}>
+            <div><div style={{fontWeight:700,fontSize:14}}>{ev.title}</div>{ev.matchDate&&<div style={{color:C.limeLight,fontSize:12}}>{fmtDate(ev.matchDate)}</div>}</div>
+            {lott?.conducted?<Tag label="抽選済み" color="lime"/>:hopefuls>lottSlots?<Tag label="要抽選" color="amber"/>:null}
+          </div>
+          <div style={{maxHeight:260,overflowY:"auto",marginBottom:8}}>{er.map(r=>{
+            const res=resp[r.id];const isCon=confirmed.includes(r.id);
+            return(<div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(255,255,255,0.04)",borderRadius:10,padding:"7px 12px",marginBottom:4}}>
+              <span style={{fontSize:13}}><span style={{color:C.dim,fontSize:11}}>#{r.num} </span>{r.name}</span>
+              <div style={{display:"flex",gap:4}}>
+                {isCon&&<Tag label="🔒" color="sky"/>}
+                {!res?<Tag label="未回答" color="gray"/>:!res.attending?<Tag label="欠席" color="red"/>:<><Tag label="参加" color="lime"/>{res.parkingNeeded?<Tag label="🚗" color="amber"/>:<Tag label="🚶" color="white"/>}</>}
+              </div>
+            </div>)})}</div>
+          {!lott?.conducted&&hopefuls>0&&<button onClick={()=>{onSelectEvent(ev.id);onRunLottery(ev.id)}} style={{...S.btnY,marginTop:4}}>🎰 {ev.title} を抽選する</button>}
+        </div>)})}
+    </div>}
+
+    {modal&&<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+      <div style={{background:"#0a2a0a",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:24,width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.5)"}}>
+        <p style={{color:"#fff",marginBottom:24,fontSize:15,fontWeight:700,whiteSpace:"pre-wrap",lineHeight:1.6}}>{modal.m}</p>
+        <div style={{display:"flex",gap:12}}>
+          <Btn variant="ghost" onClick={modal.no} style={{flex:1}}>キャンセル</Btn>
+          <Btn onClick={modal.ok} style={{flex:1}}>OK</Btn>
+        </div>
+      </div>
+    </div>}
+  </div>);
+}
+// ── LOTTERY ──
+const PATH_COLORS=["#84cc16","#f59e0b","#3b82f6","#ec4899","#8b5cf6","#06b6d4","#f97316","#14b8a6","#a3e635","#fb923c"];
+function genRungs(n,rows){return Array.from({length:rows},()=>{const s=new Set();let c=0;while(c<n-1){if(Math.random()<0.42){s.add(c);c+=2}else c++}return s})}
+function buildPaths(n,rows,rungs,CW,RH,PX,PY){
+  const cx=c=>PX+c*CW+CW/2;
+  return Array.from({length:n},(_,start)=>{
+    let col=start,d=`M${cx(col)},${PY}`;
+    for(let r=0;r<rows;r++){const my=PY+(r+.5)*RH,ny=PY+(r+1)*RH;if(rungs[r].has(col)){d+=`L${cx(col)},${my}L${cx(col+1)},${my}`;col++;d+=`L${cx(col)},${ny}`}else if(col>0&&rungs[r].has(col-1)){d+=`L${cx(col)},${my}L${cx(col-1)},${my}`;col--;d+=`L${cx(col)},${ny}`}else d+=`L${cx(col)},${ny}`}
+    return{d,finalCol:col}});
+}
+function LotteryScreen({event,participants,limit,onComplete,onBack}){
+  const n=participants.length;const ref=useRef(null);
+  const[svgW,setSvgW]=useState(340);
+  useEffect(()=>{if(ref.current)setSvgW(ref.current.offsetWidth-16)},[]);
+  const ROWS=18,CW=Math.max(32,Math.min(60,Math.floor((svgW-40)/Math.max(n,1)))),RH=24,PX=20,PY=44;
+  const SVG_W=n*CW+PX*2,SVG_H=ROWS*RH+PY*2+32;
+  const colX=c=>PX+c*CW+CW/2;
+  const[rungs]=useState(()=>genRungs(n,ROWS));
+  const[paths]=useState(()=>buildPaths(n,ROWS,rungs,CW,RH,PX,PY));
+  const outcomes=paths.map((p,i)=>({i,name:participants[i]?.name,finalCol:p.finalCol,isWinner:p.finalCol<limit}));
+  const rungLines=[];
+  for(let r=0;r<ROWS;r++){const y=PY+(r+.5)*RH;rungs[r].forEach(lc=>rungLines.push({x1:colX(lc),x2:colX(lc+1),y}))}
+
+  const[phase,setPhase]=useState("ready");
+  const[curIdx,setCurIdx]=useState(0);
+  const[revealed,setRevealed]=useState({});
+  const pathRefs=useRef([]);
+
+  useEffect(()=>{
+    if(phase!=="animating")return;
+    if(curIdx>=n){setPhase("done");setTimeout(()=>onComplete(outcomes.filter(o=>o.isWinner).map(o=>o.name)),2000);return}
+    const el=pathRefs.current[curIdx];if(!el){setCurIdx(c=>c+1);return}
+    const isWin=outcomes[curIdx].isWinner,color=PATH_COLORS[curIdx%PATH_COLORS.length],len=el.getTotalLength();
+    el.style.transition="none";el.style.stroke=color;el.style.opacity="1";el.style.strokeDasharray=`${len}`;el.style.strokeDashoffset=`${len}`;
+    let t1,t2,raf;
+    raf=requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const dur=Math.max(600,1400-n*35);
+      el.style.transition=`stroke-dashoffset ${dur}ms linear`;el.style.strokeDashoffset="0";
+      t1=setTimeout(()=>{el.style.stroke=isWin?"#f59e0b":"#374151";setRevealed(p=>({...p,[curIdx]:isWin}));t2=setTimeout(()=>setCurIdx(c=>c+1),400)},dur);
+    }));
+    return()=>{cancelAnimationFrame(raf);clearTimeout(t1);clearTimeout(t2)};
+  },[curIdx,phase]);
+
+  return(<div>
+    <BackBar title="🎰 あみだくじ抽選" onBack={onBack} label="← 戻る"/>
+    <div style={{...S.card,textAlign:"center"}}>
+      <span style={{color:C.muted,fontSize:14}}><span style={{color:C.amber,fontWeight:700}}>{n}名</span> の希望者 → <span style={{color:C.limeLight,fontWeight:700}}>{limit}台</span> 当選</span>
+    </div>
+    <div ref={ref} style={{width:"100%",overflowX:"auto",background:"rgba(0,0,0,0.25)",borderRadius:16,padding:8,marginBottom:12}}>
+      <svg width={SVG_W} height={SVG_H} style={{minWidth:SVG_W,display:"block",margin:"0 auto"}}>
+        {participants.map((p,i)=><text key={i} x={colX(i)} y={PY-18} textAnchor="middle" fontSize="10" fontWeight="bold" fill={revealed[i]!==undefined?(revealed[i]?"#f59e0b":"#4b5563"):i===curIdx&&phase==="animating"?PATH_COLORS[i%PATH_COLORS.length]:"#6b7280"}>{(p.name||"").slice(0,3)}</text>)}
+        {Array.from({length:n},(_,i)=><line key={i} x1={colX(i)} y1={PY} x2={colX(i)} y2={PY+ROWS*RH} stroke="#1a4a1a" strokeWidth="2.5"/>)}
+        {rungLines.map((r,i)=><line key={i} x1={r.x1} y1={r.y} x2={r.x2} y2={r.y} stroke="#1a4a1a" strokeWidth="2.5"/>)}
+        {paths.map((p,i)=><path key={i} ref={el=>pathRefs.current[i]=el} d={p.d} fill="none" stroke="transparent" strokeWidth="3.5" strokeLinecap="round" style={{opacity:0}}/>)}
+        {Array.from({length:n},(_,i)=>{const win=i<limit;return(<g key={i}><rect x={colX(i)-15} y={PY+ROWS*RH+4} width="30" height="20" rx="5" fill={win?"#78350f":"#111827"}/><text x={colX(i)} y={PY+ROWS*RH+18} textAnchor="middle" fontSize="9" fontWeight="bold" fill={win?"#fde047":"#4b5563"}>{win?"当選":"落選"}</text></g>)})}
+      </svg>
+    </div>
+    {phase!=="ready"&&<div style={{display:"flex",justifyContent:"center",gap:6,flexWrap:"wrap",marginBottom:12}}>{participants.map((_,i)=><div key={i} style={{width:revealed[i]===true||(i===curIdx&&phase==="animating")?12:8,height:revealed[i]===true||(i===curIdx&&phase==="animating")?12:8,borderRadius:"50%",background:revealed[i]===true?C.amber:revealed[i]===false?"#374151":i===curIdx&&phase==="animating"?"#fff":"rgba(255,255,255,0.2)",transition:"all 0.3s"}}/>)}</div>}
+    {phase==="animating"&&<p style={{textAlign:"center",color:C.muted,fontSize:14}}>{participants[curIdx]?.name} のルートを辿っています...</p>}
+    {phase==="ready"&&<Btn variant="yellow" onClick={()=>{setPhase("animating");setCurIdx(0)}}>✨ スタート！</Btn>}
+    {phase==="done"&&<div style={{textAlign:"center"}}><div style={{fontSize:40,marginBottom:8}}>🎊</div><p style={{color:C.limeLight,fontWeight:900,fontSize:20}}>抽選完了！</p><p style={{color:C.muted,fontSize:14}}>結果画面へ移動します...</p></div>}
+  </div>);
+}
+
+// ── RESULTS ──
+function ResultsScreen({event,roster,responses,lottery,onBack}){
+  const[copied,setCopied]=useState(false);
+  if(!lottery?.conducted)return(<div style={{textAlign:"center",paddingTop:64}}><p style={{color:C.muted}}>まだ抽選が行われていません</p><Btn variant="ghost" onClick={onBack} style={{marginTop:16}}>← 戻る</Btn></div>);
+  const confirmed=getConfirmed(event);
+  const confirmedMembers=confirmed.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
+  const winnerNames=lottery.winners||[];
+  const winners=roster.filter(r=>winnerNames.includes(r.name));
+  const losers=Object.entries(responses).filter(([id,r])=>r.attending&&r.parkingNeeded&&!confirmed.includes(id)).map(([id])=>roster.find(r=>r.id===id)).filter(r=>r&&!winnerNames.includes(r.name));
+  const walkers=Object.entries(responses).filter(([_,r])=>r.attending&&!r.parkingNeeded).map(([id])=>roster.find(r=>r.id===id)).filter(Boolean);
+  const absent=Object.entries(responses).filter(([_,r])=>!r.attending).map(([id])=>roster.find(r=>r.id===id)).filter(Boolean);
+  const er=getEventRoster(roster,event);
+  const noReply=er.filter(r=>!responses[r.id]);
+
+  function genText(){
+    const L=[`⚽ 【駐車場抽選結果】`,event?.title&&`📌 ${event.title}`,event?.matchDate&&`🗓 ${fmtDate(event.matchDate)}`,""];
+    if(confirmedMembers.length){L.push(`🔒 【確定枠 ${confirmedMembers.length}名】`);confirmedMembers.forEach(w=>L.push(`  🔒 #${w.num} ${w.name}`));L.push("")}
+    L.push(`🚗 【当選 ${winners.length}名】`);winners.forEach(w=>L.push(`  ✅ #${w.num} ${w.name}`));L.push("");
+    if(losers.length){L.push(`😢 【落選 ${losers.length}名】`);losers.forEach(l=>L.push(`  ❌ #${l.num} ${l.name}`));L.push("")}
+    if(walkers.length){L.push(`🚶 【徒歩参加 ${walkers.length}名】`);walkers.forEach(a=>L.push(`  #${a.num} ${a.name}`));L.push("")}
+    if(absent.length){L.push(`🏠 【欠席 ${absent.length}名】`);absent.forEach(a=>L.push(`  #${a.num} ${a.name}`));L.push("")}
+    if(noReply.length){L.push(`📭 【未回答 ${noReply.length}名】`);noReply.forEach(n=>L.push(`  #${n.num} ${n.name}`))}
+    return L.filter(l=>l!==false).join("\n");
+  }
+  function share(){
+    const txt=genText();
+    if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
+    else{navigator.clipboard.writeText(txt).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),3000)}).catch(()=>{
+      const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);setCopied(true);setTimeout(()=>setCopied(false),3000);
+    })}
+  }
+
+  return(<div>
+    <BackBar title="🎉 抽選結果" onBack={onBack} label="← 一覧"/>
+    {confirmedMembers.length>0&&<div style={S.cardLock}>
+      <div style={{fontWeight:900,color:C.sky,marginBottom:12}}>🔒 確定枠 {confirmedMembers.length}名</div>
+      {confirmedMembers.map(w=><div key={w.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(56,189,248,0.1)",borderRadius:12,padding:"10px 12px",marginBottom:8}}>
+        <span style={{fontSize:20}}>🔒</span><span style={{fontWeight:700}}>#{w.num} {w.name}</span>
+      </div>)}
+    </div>}
+    <div style={S.cardAmber}>
+      <div style={{fontWeight:900,color:C.amber,marginBottom:12}}>🚗 当選 {winners.length}名</div>
+      {winners.length>0?winners.map(w=><div key={w.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(245,158,11,0.1)",borderRadius:12,padding:"10px 12px",marginBottom:8}}><span style={{fontSize:20}}>🎊</span><span style={{fontWeight:700}}>#{w.num} {w.name}</span></div>):<p style={{color:C.dim,fontSize:14}}>当選者なし</p>}
+    </div>
+    {losers.length>0&&<div style={S.card}><div style={{fontWeight:700,color:C.muted,marginBottom:10}}>😢 落選 {losers.length}名</div>{losers.map(l=><div key={l.id} style={{display:"flex",alignItems:"center",gap:8,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:"8px 12px",marginBottom:4}}><span style={{color:C.dim}}>×</span><span style={{color:C.muted,fontSize:14}}>#{l.num} {l.name}</span></div>)}</div>}
+    {walkers.length>0&&<div style={S.card}><div style={{fontWeight:700,color:C.limeLight,marginBottom:8}}>🚶 徒歩参加 {walkers.length}名</div><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{walkers.map(a=><Tag key={a.id} label={`#${a.num} ${a.name}`} color="lime"/>)}</div></div>}
+    {absent.length>0&&<div style={S.card}><div style={{fontWeight:700,color:"rgba(248,113,113,0.7)",marginBottom:8}}>🏠 欠席 {absent.length}名</div><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{absent.map(a=><Tag key={a.id} label={`#${a.num} ${a.name}`} color="red"/>)}</div></div>}
+    {noReply.length>0&&<div style={S.card}><div style={{fontWeight:700,color:C.dim,marginBottom:8}}>📭 未回答 {noReply.length}名</div><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{noReply.map(n=><Tag key={n.id} label={`#${n.num} ${n.name}`} color="gray"/>)}</div></div>}
+    <Btn onClick={share}>{copied?"✅ コピーしました！LINEに貼り付けてください":"📋 結果をLINEに共有する"}</Btn>
+  </div>);
+}
+
+// ── APP ──
+function App(){
+  const[screen,setScreen]=useState("loading");
+  const[roster,setRoster]=useState([]);
+  const[events,setEvents]=useState([]);
+  const[allResponses,setAllResponses]=useState({});
+  const[allLotteries,setAllLotteries]=useState({});
+  const[selectedEventId,setSelectedEventId]=useState(null);
+  const[lottParticipants,setLottParticipants]=useState([]);
+  const[dataLoading,setDataLoading]=useState(true);
+  const[syncing,setSyncing]=useState(false);
+  const[errorMsg,setErrorMsg]=useState("");
+  const editingRef=useRef(false);
+  const screenRef=useRef("loading");
+
+  function navigate(s){screenRef.current=s;setScreen(s);try{history.pushState({screen:s},"",`#${s}`)}catch(e){}}
+
+  useEffect(()=>{
+    const handler=e=>{const s=e.state?.screen||"home";screenRef.current=s;setScreen(s)};
+    window.addEventListener("popstate",handler);
+    return()=>window.removeEventListener("popstate",handler);
+  },[]);
+
+  async function loadAll(){
+    if(editingRef.current)return;
+    setSyncing(true);
+    const ro=await fbGet("roster");const evList=await fbGet("events");
+    if(ro===undefined||evList===undefined){setSyncing(false);setDataLoading(false);setErrorMsg("データベースへのアクセスに失敗しました。");if(screenRef.current==="loading")navigate("error");return}
+    const r=Array.isArray(ro)?ro:(ro?Object.values(ro):[]);
+    const evs=Array.isArray(evList)?evList:(evList?Object.values(evList):[]);
+    let finalRoster=r.map(m=>({...m,grade:m.grade||"4年"}));
+    if(ro===null){const def=DEFAULT_ROSTER;await fbSet("roster",def);finalRoster=def}
+    setRoster(finalRoster);setEvents(evs);
+    if(evs.length>0){
+      const[resps,lotts]=await Promise.all([
+        Promise.all(evs.map(e=>fbGet(`responses/${e.id}`).then(v=>[e.id,v||{}]))),
+        Promise.all(evs.map(e=>fbGet(`lotteries/${e.id}`).then(v=>[e.id,v]))),
+      ]);
+      setAllResponses(Object.fromEntries(resps));
+      setAllLotteries(Object.fromEntries(lotts.filter(([_,v])=>v)));
+    }
+    setSyncing(false);setDataLoading(false);
+    if(screenRef.current==="loading"||screenRef.current==="error")navigate("home");
+  }
+
+  useEffect(()=>{loadAll();const t=setInterval(loadAll,30000);return()=>clearInterval(t)},[]);
+
+  async function handleSaveRoster(ro){editingRef.current=false;setRoster(ro);await fbSet("roster",ro)}
+  async function handleSaveEvent(ev){
+    editingRef.current=false;
+    const next=events.find(e=>e.id===ev.id)?events.map(e=>e.id===ev.id?ev:e):[...events,ev];
+    setEvents(next);await fbSet("events",next);
+    if(!allResponses[ev.id])setAllResponses(p=>({...p,[ev.id]:{}}));
+  }
+  async function handleDeleteEvent(id){
+    const next=events.filter(e=>e.id!==id);setEvents(next);await fbSet("events",next);
+    setAllResponses(p=>{const n={...p};delete n[id];return n});
+    setAllLotteries(p=>{const n={...p};delete n[id];return n});
+    await Promise.all([fbDel(`responses/${id}`),fbDel(`lotteries/${id}`)]);
+  }
+  async function handleSubmit(eventId,{memberId,attending,parkingNeeded}){
+    const entry={attending,parkingNeeded,at:Date.now()};
+    await fbSet(`responses/${eventId}/${memberId}`,entry);
+    setAllResponses(prev=>({...prev,[eventId]:{...(prev[eventId]||{}),[memberId]:entry}}));
+  }
+  async function handleResetResponses(eventId){
+    await fbDel(`responses/${eventId}`);await fbDel(`lotteries/${eventId}`);
+    setAllResponses(p=>({...p,[eventId]:{}}));
+    setAllLotteries(p=>{const n={...p};delete n[eventId];return n});
+  }
+  async function handleRunLottery(eventId){
+    const ev=events.find(e=>e.id===eventId);
+    const resp=allResponses[eventId]||{};
+    const confirmed=getConfirmed(ev||{});
+    const hp=Object.entries(resp).filter(([id,r])=>r.attending&&r.parkingNeeded&&!confirmed.includes(id)).map(([id])=>roster.find(r=>r.id===id)).filter(Boolean);
+    if(hp.length===0){alert("駐車場を希望している人がいません");return}
+    setSelectedEventId(eventId);setLottParticipants(hp);navigate("lottery");
+  }
+  async function handleCompleteLottery(winners){
+    const result={conducted:true,conductedAt:Date.now(),winners};
+    await fbSet(`lotteries/${selectedEventId}`,result);
+    setAllLotteries(p=>({...p,[selectedEventId]:result}));
+    navigate("results");
+  }
+
+  const selEv=events.find(e=>e.id===selectedEventId)||null;
+  const selResp=(selectedEventId&&allResponses[selectedEventId])||{};
+  const selLott=(selectedEventId&&allLotteries[selectedEventId])||null;
+
+  if(screen==="loading")return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{textAlign:"center"}}><div style={{fontSize:48,color:C.limeLight,animation:"spFloat 1s ease-in-out infinite"}}>⚽</div><p style={{color:C.muted,marginTop:12,fontSize:14}}>読み込み中...</p></div>
+  </div>);
+
+  if(screen==="error")return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{textAlign:"center",padding:"0 20px"}}>
+      <div style={{fontSize:48,marginBottom:16}}>⚠️</div>
+      <p style={{color:C.rose,fontWeight:700,fontSize:18,marginBottom:8}}>通信エラー</p>
+      <p style={{color:C.muted,fontSize:14,marginBottom:8}}>{errorMsg}</p>
+      <p style={{color:C.dim,fontSize:12,marginBottom:24,lineHeight:1.6}}>ネットワーク接続を確認してください</p>
+      <Btn onClick={()=>{navigate("loading");loadAll()}} style={{maxWidth:200,margin:"0 auto"}}>↻ 再読み込み</Btn>
+    </div>
+  </div>);
+
+  return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff",padding:"0 16px 80px",position:"relative"}}>
+    {syncing&&<div style={{position:"fixed",top:12,right:12,background:"rgba(0,0,0,0.5)",color:C.limeLight,padding:"4px 8px",borderRadius:8,fontSize:11,fontWeight:700,zIndex:100,backdropFilter:"blur(4px)"}}>↻ 同期中</div>}
+    <div style={{maxWidth:460,margin:"0 auto",paddingTop:24}}>
+      {screen==="home"&&<HomeScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries} onNav={navigate} onSelectEvent={setSelectedEventId} loading={dataLoading}/>}
+      {screen==="event"&&<EventScreen event={selEv} roster={roster} responses={selResp} lottery={selLott} onBack={()=>navigate("home")} onSubmit={handleSubmit} onNav={navigate}/>}
+      {screen==="admin"&&<AdminScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries} onSelectEvent={setSelectedEventId} onSaveEvent={handleSaveEvent} onDeleteEvent={handleDeleteEvent} onSaveRoster={handleSaveRoster} onRunLottery={handleRunLottery} onResetResponses={handleResetResponses} onBack={()=>navigate("home")} onNav={navigate}/>}
+      {screen==="lottery"&&<LotteryScreen event={selEv} participants={lottParticipants} limit={getLotterySlots(selEv||{})} onComplete={handleCompleteLottery} onBack={()=>navigate("admin")}/>}
+      {screen==="results"&&<ResultsScreen event={selEv} roster={roster} responses={selResp} lottery={selLott} onBack={()=>navigate("home")}/>}
+    </div>
+  </div>);
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+  </script>
+</body>
+</html>
