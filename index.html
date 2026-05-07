@@ -464,7 +464,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
             {lott?.conducted&&<button onClick={()=>{onSelectEvent(ev.id);onNav("results")}} style={S.btnSmO}>結果を見る</button>}
             <button onClick={()=>{
               const url=window.location.href.split('#')[0];
-              const txt=`⚽ 【新しい試合のお知らせ】\n📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}\n⏰ 回答締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n\n👇 以下のURLから参加・駐車場の回答をお願いします！\n${url}`;
+              const txt=`⚽ 新しい試合のお知らせ\n━━━━━━━━━━━━\n📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}\n⏰ 締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n━━━━━━━━━━━━\n👇 参加・駐車場の回答はこちら\n${url}`;
               if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
               else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
                 const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！LINEに貼り付けてください");
