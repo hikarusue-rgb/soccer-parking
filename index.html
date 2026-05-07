@@ -178,6 +178,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
   const[memberId,setMemberId]=useState(()=>localStorage.getItem(myKey)||"");
   const[attending,setAttending]=useState(null);
   const[parking,setParking]=useState(null);
+  const[carpool,setCarpool]=useState(0);
   const[err,setErr]=useState("");
   const[saving,setSaving]=useState(false);
   const[done,setDone]=useState(false);
@@ -188,7 +189,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
     if(saved&&er.find(r=>r.id===saved)){
       setMemberId(saved);
       const prev=responses[saved];
-      if(prev){setAttending(prev.attending);setParking(prev.parkingNeeded||false)}
+      if(prev){setAttending(prev.attending);setParking(prev.parkingNeeded||false);setCarpool(prev.carpoolCapacity||0)}
     }
   },[event?.id]);
 
@@ -207,8 +208,8 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
 
   function selectMember(id){setMemberId(id);localStorage.setItem(myKey,id);
     const prev=responses[id];
-    if(prev){setAttending(prev.attending);setParking(prev.parkingNeeded||false)}
-    else{setAttending(null);setParking(null)}
+    if(prev){setAttending(prev.attending);setParking(prev.parkingNeeded||false);setCarpool(prev.carpoolCapacity||0)}
+    else{setAttending(null);setParking(null);setCarpool(0)}
     setEditing(false);setDone(false);
   }
 
@@ -217,7 +218,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
     if(attending===null)return setErr("参加の有無を選んでください");
     if(attending&&parking===null)return setErr("駐車場の希望を選んでください");
     setErr("");setSaving(true);
-    await onSubmit(event.id,{memberId,attending,parkingNeeded:attending?parking:false});
+    await onSubmit(event.id,{memberId,attending,parkingNeeded:attending?parking:false,carpoolCapacity:attending&&parking?carpool:0});
     setSaving(false);setDone(true);setEditing(false);
   }
 
@@ -292,10 +293,17 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
         </div>
         {attending===true&&!isConfirmed&&<div style={{marginBottom:12}} className="fade-in">
           <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🚗 駐車場を希望しますか？</div>
-          <div style={{display:"flex",gap:8}}>
+          <div style={{display:"flex",gap:8,marginBottom:8}}>
             <button onClick={()=>setParking(true)} style={S.choice(parking===true,"amber")}>🚗 希望する</button>
-            <button onClick={()=>setParking(false)} style={S.choice(parking===false,"lime")}>🚶 不要です</button>
+            <button onClick={()=>{setParking(false);setCarpool(0)}} style={S.choice(parking===false,"lime")}>🚶 不要です</button>
           </div>
+          {parking===true&&<div style={{background:"rgba(255,255,255,0.05)",padding:12,borderRadius:12,marginTop:8}}>
+            <div style={{fontSize:12,color:C.dim,marginBottom:6}}>🚙 他の人を乗合できますか？</div>
+            <select value={carpool} onChange={e=>setCarpool(Number(e.target.value))} style={S.select}>
+              <option value={0}>乗合不可（自分の分のみ）</option>
+              {[1,2,3,4,5].map(n=><option key={n} value={n}>乗合可：{n}人まで</option>)}
+            </select>
+          </div>}
           <p style={{fontSize:12,color:C.dim,textAlign:"center",marginTop:8}}>抽選枠 {lottSlots}台・超過時はあみだくじ</p>
         </div>}
         <ErrMsg msg={err}/>
@@ -454,6 +462,14 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {!lott?.conducted&&hopefuls>0&&<button onClick={()=>{onSelectEvent(ev.id);onRunLottery(ev.id)}} style={S.btnSmY}>🎰 抽選{hopefuls>lottSlots?`（${hopefuls}→${lottSlots}台）`:"（全員当選）"}</button>}
             {lott?.conducted&&<button onClick={()=>{onSelectEvent(ev.id);onNav("results")}} style={S.btnSmO}>結果を見る</button>}
+            <button onClick={()=>{
+              const url=window.location.href.split('#')[0];
+              const txt=`⚽ 【新しい試合のお知らせ】\n📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}\n⏰ 回答締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n\n👇 以下のURLから参加・駐車場の回答をお願いします！\n${url}`;
+              if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
+              else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
+                const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！LINEに貼り付けてください");
+              })}
+            }} style={S.btnSm}>📢 LINE共有</button>
             <button onClick={async()=>{if(await confirm(`「${ev.title}」をリセット？`))onResetResponses(ev.id)}} style={S.btnSm}>↺ リセット</button>
             <button onClick={async()=>{if(await confirm(`「${ev.title}」を削除？`))onDeleteEvent(ev.id)}} style={{background:"none",border:"none",color:"rgba(248,113,113,0.7)",fontSize:13,cursor:"pointer",padding:"0 8px"}}>削除</button>
           </div>
@@ -599,10 +615,14 @@ function ResultsScreen({event,roster,responses,lottery,onBack}){
 
   function genText(){
     const L=[`⚽ 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`,"━━━━━━━━━━━━"];
+    const formatName = (user) => {
+      const resp = responses[user.id];
+      return resp?.carpoolCapacity > 0 ? `${user.name}(乗合+${resp.carpoolCapacity})` : user.name;
+    };
     if(confirmedMembers.length||winners.length){
       L.push(`🚗 【車を出す方】`);
-      if(confirmedMembers.length) L.push(` 🔒確定: `+confirmedMembers.map(w=>w.name).join(", "));
-      if(winners.length) L.push(` 🎯当選: `+winners.map(w=>w.name).join(", "));
+      if(confirmedMembers.length) L.push(` 🔒確定: `+confirmedMembers.map(formatName).join(", "));
+      if(winners.length) L.push(` 🎯当選: `+winners.map(formatName).join(", "));
       L.push("━━━━━━━━━━━━");
     }
     if(losers.length){
