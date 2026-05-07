@@ -223,10 +223,13 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
   }
 
   function copyReminder(){
-    const names=unanswered.map(r=>`#${r.num} ${r.name}`).join(", ");
-    const txt=`📢 【${event.title}】回答お願いします！\n\n未回答: ${names}\n\n締切: ${event.deadline?fmtDateTime(event.deadline):"未設定"}`;
+    const names=unanswered.map(r=>r.name).join(", ");
+    const url=window.location.href.split('#')[0];
+    const txt=`📢 回答のお願い\n━━━━━━━━━━━━\n📌 ${event.title}\n🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}\n⏰ 締切: ${event.deadline?fmtDateTime(event.deadline):"未設定"}\n━━━━━━━━━━━━\n📭 【未回答の方】\n ${names}\n━━━━━━━━━━━━\n👇 回答はこちらから\n${url}`;
     if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
-    else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{})}
+    else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
+      const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！LINEに貼り付けてください");
+    })}
   }
 
   const showForm=!myResp||editing;
