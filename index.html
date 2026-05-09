@@ -223,7 +223,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
   }
 
   function copyReminder(){
-    const names=unanswered.map(r=>r.name).join(", ");
+    const names=unanswered.map(r=>`#${r.num} ${r.name}`).join(", ");
     const url=window.location.href.split('#')[0];
     const txt=`📢 回答のお願い\n━━━━━━━━━━━━\n📌 ${event.title}\n🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}\n⏰ 締切: ${event.deadline?fmtDateTime(event.deadline):"未設定"}\n━━━━━━━━━━━━\n📭 【未回答の方】\n ${names}\n━━━━━━━━━━━━\n👇 回答はこちらから\n${url}`;
     if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
@@ -520,7 +520,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
               <span style={{fontSize:13}}><span style={{color:C.dim,fontSize:11}}>#{r.num} </span>{r.name}</span>
               <div style={{display:"flex",gap:4}}>
                 {isCon&&<Tag label="🔒" color="sky"/>}
-                {!res?<Tag label="未回答" color="gray"/>:!res.attending?<Tag label="欠席" color="red"/>:<><Tag label="参加" color="lime"/>{res.parkingNeeded?<Tag label="🚗" color="amber"/>:<Tag label="🚶" color="white"/>}</>}
+                {!res?<Tag label="未回答" color="gray"/>:!res.attending?<Tag label="欠席" color="red"/>:<><Tag label="参加" color="lime"/>{res.parkingNeeded?<Tag label={`🚗${res.carpoolCapacity>0?` 乗合+${res.carpoolCapacity}`:""}`} color="amber"/>:<Tag label="🚶" color="white"/>}</>}
               </div>
             </div>)})}</div>
           {!lott?.conducted&&hopefuls>0&&<button onClick={()=>{onSelectEvent(ev.id);onRunLottery(ev.id)}} style={{...S.btnY,marginTop:4}}>🎰 {ev.title} を抽選する</button>}
@@ -557,7 +557,7 @@ function LotteryScreen({event,participants,limit,onComplete,onBack}){
   const colX=c=>PX+c*CW+CW/2;
   const[rungs]=useState(()=>genRungs(n,ROWS));
   const[paths]=useState(()=>buildPaths(n,ROWS,rungs,CW,RH,PX,PY));
-  const outcomes=paths.map((p,i)=>({i,name:participants[i]?.name,finalCol:p.finalCol,isWinner:p.finalCol<limit}));
+  const outcomes=paths.map((p,i)=>({i,id:participants[i]?.id,name:participants[i]?.name,finalCol:p.finalCol,isWinner:p.finalCol<limit}));
   const rungLines=[];
   for(let r=0;r<ROWS;r++){const y=PY+(r+.5)*RH;rungs[r].forEach(lc=>rungLines.push({x1:colX(lc),x2:colX(lc+1),y}))}
 
@@ -568,7 +568,7 @@ function LotteryScreen({event,participants,limit,onComplete,onBack}){
 
   useEffect(()=>{
     if(phase!=="animating")return;
-    if(curIdx>=n){setPhase("done");setTimeout(()=>onComplete(outcomes.filter(o=>o.isWinner).map(o=>o.name)),2000);return}
+    if(curIdx>=n){setPhase("done");setTimeout(()=>onComplete(outcomes.filter(o=>o.isWinner).map(o=>o.id)),2000);return}
     const el=pathRefs.current[curIdx];if(!el){setCurIdx(c=>c+1);return}
     const isWin=outcomes[curIdx].isWinner,color=PATH_COLORS[curIdx%PATH_COLORS.length],len=el.getTotalLength();
     el.style.transition="none";el.style.stroke=color;el.style.opacity="1";el.style.strokeDasharray=`${len}`;el.style.strokeDashoffset=`${len}`;
@@ -608,9 +608,9 @@ function ResultsScreen({event,roster,responses,lottery,onBack}){
   if(!lottery?.conducted)return(<div style={{textAlign:"center",paddingTop:64}}><p style={{color:C.muted}}>まだ抽選が行われていません</p><Btn variant="ghost" onClick={onBack} style={{marginTop:16}}>← 戻る</Btn></div>);
   const confirmed=getConfirmed(event);
   const confirmedMembers=confirmed.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
-  const winnerNames=lottery.winners||[];
-  const winners=roster.filter(r=>winnerNames.includes(r.name));
-  const losers=Object.entries(responses).filter(([id,r])=>r.attending&&r.parkingNeeded&&!confirmed.includes(id)).map(([id])=>roster.find(r=>r.id===id)).filter(r=>r&&!winnerNames.includes(r.name));
+  const winnerIds=lottery.winners||[];
+  const winners=roster.filter(r=>winnerIds.includes(r.id)||winnerIds.includes(r.name));
+  const losers=Object.entries(responses).filter(([id,r])=>r.attending&&r.parkingNeeded&&!confirmed.includes(id)).map(([id])=>roster.find(r=>r.id===id)).filter(r=>r&&!winnerIds.includes(r.id)&&!winnerIds.includes(r.name));
   const walkers=Object.entries(responses).filter(([_,r])=>r.attending&&!r.parkingNeeded).map(([id])=>roster.find(r=>r.id===id)).filter(Boolean);
   const absent=Object.entries(responses).filter(([_,r])=>!r.attending).map(([id])=>roster.find(r=>r.id===id)).filter(Boolean);
   const er=getEventRoster(roster,event);
@@ -619,8 +619,7 @@ function ResultsScreen({event,roster,responses,lottery,onBack}){
   function genText(){
     const L=[`⚽ 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`,"━━━━━━━━━━━━"];
     const formatName = (user) => {
-      const resp = responses[user.id];
-      return resp?.carpoolCapacity > 0 ? `${user.name}(乗合+${resp.carpoolCapacity})` : user.name;
+      return `#${user.num} ${user.name}`;
     };
     if(confirmedMembers.length||winners.length){
       L.push(`🚗 【車を出す方】`);
@@ -630,18 +629,18 @@ function ResultsScreen({event,roster,responses,lottery,onBack}){
     }
     if(losers.length){
       L.push(`💧 【落選（乗り合わせ等）】`);
-      L.push(` ❌ `+losers.map(l=>l.name).join(", "));
+      L.push(` ❌ `+losers.map(l=>`#${l.num} ${l.name}`).join(", "));
       L.push("━━━━━━━━━━━━");
     }
     if(walkers.length){
       L.push(`🚶 【車なし / 徒歩参加】`);
-      L.push(` `+walkers.map(a=>a.name).join(", "));
+      L.push(` `+walkers.map(a=>`#${a.num} ${a.name}`).join(", "));
       L.push("━━━━━━━━━━━━");
     }
     if(absent.length||noReply.length){
       L.push(`🏠 【欠席 / 未回答】`);
-      if(absent.length) L.push(` 欠席: `+absent.map(a=>a.name).join(", "));
-      if(noReply.length) L.push(` 未回答: `+noReply.map(n=>n.name).join(", "));
+      if(absent.length) L.push(` 欠席: `+absent.map(a=>`#${a.num} ${a.name}`).join(", "));
+      if(noReply.length) L.push(` 未回答: `+noReply.map(n=>`#${n.num} ${n.name}`).join(", "));
       L.push("━━━━━━━━━━━━");
     }
     return L.filter(l=>l!==false).join("\n");
@@ -734,8 +733,8 @@ function App(){
     setAllLotteries(p=>{const n={...p};delete n[id];return n});
     await Promise.all([fbDel(`responses/${id}`),fbDel(`lotteries/${id}`)]);
   }
-  async function handleSubmit(eventId,{memberId,attending,parkingNeeded}){
-    const entry={attending,parkingNeeded,at:Date.now()};
+  async function handleSubmit(eventId,{memberId,attending,parkingNeeded,carpoolCapacity}){
+    const entry={attending,parkingNeeded,carpoolCapacity,at:Date.now()};
     await fbSet(`responses/${eventId}/${memberId}`,entry);
     setAllResponses(prev=>({...prev,[eventId]:{...(prev[eventId]||{}),[memberId]:entry}}));
   }
