@@ -295,13 +295,15 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
           </div>
         </div>
         {attending===true&&<div style={{marginBottom:12}} className="fade-in">
-          {!isConfirmed&&<>
-            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🚗 駐車場を希望しますか？</div>
-            <div style={{display:"flex",gap:8,marginBottom:8}}>
-              <button onClick={()=>setParking(true)} style={S.choice(parking===true,"amber")}>🚗 希望する</button>
-              <button onClick={()=>{setParking(false);setCarpool(0)}} style={S.choice(parking===false,"lime")}>🚶 不要です</button>
+          {!isConfirmed ? (
+            <div>
+              <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🚗 駐車場を希望しますか？</div>
+              <div style={{display:"flex",gap:8,marginBottom:8}}>
+                <button onClick={()=>setParking(true)} style={S.choice(parking===true,"amber")}>🚗 希望する</button>
+                <button onClick={()=>{setParking(false);setCarpool(0)}} style={S.choice(parking===false,"lime")}>🚶 不要です</button>
+              </div>
             </div>
-          </>}
+          ) : null}
           {(parking===true||isConfirmed)&&<div style={{background:"rgba(255,255,255,0.05)",padding:12,borderRadius:12,marginTop:8}}>
             <div style={{fontSize:12,color:C.dim,marginBottom:6}}>🚙 他の人を乗合できますか？</div>
             <select value={carpool} onChange={e=>setCarpool(Number(e.target.value))} style={S.select}>
