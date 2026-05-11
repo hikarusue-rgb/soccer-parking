@@ -216,9 +216,9 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
   async function doSubmit(){
     if(!memberId)return setErr("名前を選んでください");
     if(attending===null)return setErr("参加の有無を選んでください");
-    if(attending&&parking===null)return setErr("駐車場の希望を選んでください");
+    if(attending&&!isConfirmed&&parking===null)return setErr("駐車場の希望を選んでください");
     setErr("");setSaving(true);
-    await onSubmit(event.id,{memberId,attending,parkingNeeded:attending?parking:false,carpoolCapacity:attending&&parking?carpool:0});
+    await onSubmit(event.id,{memberId,attending,parkingNeeded:attending?(isConfirmed?true:parking):false,carpoolCapacity:attending&&(isConfirmed||parking)?carpool:0});
     setSaving(false);setDone(true);setEditing(false);
   }
 
@@ -294,20 +294,22 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav}){
             <button onClick={()=>{setAttending(false);setParking(false)}} style={S.choice(attending===false,"rose")}>❌ 欠席</button>
           </div>
         </div>
-        {attending===true&&!isConfirmed&&<div style={{marginBottom:12}} className="fade-in">
-          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🚗 駐車場を希望しますか？</div>
-          <div style={{display:"flex",gap:8,marginBottom:8}}>
-            <button onClick={()=>setParking(true)} style={S.choice(parking===true,"amber")}>🚗 希望する</button>
-            <button onClick={()=>{setParking(false);setCarpool(0)}} style={S.choice(parking===false,"lime")}>🚶 不要です</button>
-          </div>
-          {parking===true&&<div style={{background:"rgba(255,255,255,0.05)",padding:12,borderRadius:12,marginTop:8}}>
+        {attending===true&&<div style={{marginBottom:12}} className="fade-in">
+          {!isConfirmed&&<>
+            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🚗 駐車場を希望しますか？</div>
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
+              <button onClick={()=>setParking(true)} style={S.choice(parking===true,"amber")}>🚗 希望する</button>
+              <button onClick={()=>{setParking(false);setCarpool(0)}} style={S.choice(parking===false,"lime")}>🚶 不要です</button>
+            </div>
+          </>}
+          {(parking===true||isConfirmed)&&<div style={{background:"rgba(255,255,255,0.05)",padding:12,borderRadius:12,marginTop:8}}>
             <div style={{fontSize:12,color:C.dim,marginBottom:6}}>🚙 他の人を乗合できますか？</div>
             <select value={carpool} onChange={e=>setCarpool(Number(e.target.value))} style={S.select}>
               <option value={0}>乗合不可（自分の分のみ）</option>
               {[1,2,3,4,5].map(n=><option key={n} value={n}>乗合可：{n}人まで</option>)}
             </select>
           </div>}
-          <p style={{fontSize:12,color:C.dim,textAlign:"center",marginTop:8}}>抽選枠 {lottSlots}台・超過時はあみだくじ</p>
+          {!isConfirmed&&<p style={{fontSize:12,color:C.dim,textAlign:"center",marginTop:8}}>抽選枠 {lottSlots}台・超過時はあみだくじ</p>}
         </div>}
         <ErrMsg msg={err}/>
         <Btn onClick={doSubmit} disabled={saving||!memberId||attending===null||(attending&&!isConfirmed&&parking===null)}>{saving?"送信中...":myResp?"変更を保存 →":"登録する →"}</Btn>
@@ -619,7 +621,9 @@ function ResultsScreen({event,roster,responses,lottery,onBack}){
   function genText(){
     const L=[`⚽ 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`,"━━━━━━━━━━━━"];
     const formatName = (user) => {
-      return `#${user.num} ${user.name}`;
+      const res = responses[user.id];
+      const carpool = res && res.carpoolCapacity > 0 ? `(乗合+${res.carpoolCapacity})` : "";
+      return `#${user.num} ${user.name}${carpool}`;
     };
     if(confirmedMembers.length||winners.length){
       L.push(`🚗 【車を出す方】`);
