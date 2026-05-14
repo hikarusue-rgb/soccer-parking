@@ -268,7 +268,16 @@ function EventScreen({event,roster,responses,lottery,meetingPoints,selCarpoolSet
 
     {lottery?.conducted&&selCarpoolSetup&&Object.keys(selCarpoolSetup).length>0&&<div style={{...S.cardLime,marginBottom:12}}><p style={{color:C.limeLight,fontSize:13,fontWeight:700}}>🚗 配車設定済み — 乗合申請が可能です</p></div>}
 
-    {/* Registration section */}
+    {/* Member selector shown after lottery for driver/carpool flows */}
+    {lottery?.conducted&&<div style={{...S.card,borderColor:"rgba(56,189,248,0.3)",marginBottom:12}}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:6}}>👦 名前を選んでください</div>
+      <select value={memberId} onChange={e=>selectMember(e.target.value)} style={S.select}>
+        <option value="">─ 選んでください ─</option>
+        {er.map(r=><option key={r.id} value={r.id}>#{r.num} {r.name} ({r.grade||"4年"}){responses[r.id]?" ✓":""}{confirmed.includes(r.id)?" 🔒":""}</option>)}
+      </select>
+    </div>}
+
+    {/* Registration section - only before lottery */}
     {!lottery?.conducted&&<div style={{...S.card,borderColor:"rgba(132,204,22,0.3)"}}>
       <div style={{fontSize:14,fontWeight:900,color:C.limeLight,marginBottom:12}}>✏️ 参加登録{isPast?" (締切後)":""}</div>
       {isPast&&<p style={{color:C.amber,fontSize:12,marginBottom:8}}>⚠️ 締切を過ぎていますが登録できます</p>}
@@ -747,7 +756,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,meetingPoints,allC
             {!lott?.conducted&&hopefuls>0&&<button onClick={()=>{onSelectEvent(ev.id);onRunLottery(ev.id)}} style={S.btnSmY}>🎰 抽選{hopefuls>lottSlots?`（${hopefuls}→${lottSlots}台）`:"（全員当選）"}</button>}
             {lott?.conducted&&<button onClick={()=>{onSelectEvent(ev.id);onNav("results")}} style={S.btnSmO}>結果を見る</button>}
             {lott?.conducted&&<button onClick={()=>{onSelectEvent(ev.id);onNav("carpoolSetup")}} style={{...S.btnSm,background:"rgba(56,189,248,0.15)",color:C.sky}}>🚗 配車設定</button>}
-            {allCarpoolSetup&&allCarpoolSetup[ev.id]&&Object.keys(allCarpoolSetup[ev.id]).length>0&&<button onClick={()=>{onSelectEvent(ev.id);onNav("carpoolMatching")}} style={{...S.btnSm,background:"rgba(245,158,11,0.15)",color:C.amber}}>🎯 乗合マッチング</button>}
+            {lott?.conducted&&allCarpoolSetup&&allCarpoolSetup[ev.id]&&Object.keys(allCarpoolSetup[ev.id]).length>0&&<button onClick={()=>{onSelectEvent(ev.id);onNav("carpoolMatching")}} style={{...S.btnSm,background:"rgba(245,158,11,0.15)",color:C.amber}}>🎯 乗合マッチング</button>}
             <button onClick={()=>{
               const url=window.location.href.split('#')[0];
               const txt=`⚽ 新しい試合のお知らせ\n━━━━━━━━━━━━\n📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}\n⏰ 締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n━━━━━━━━━━━━\n👇 参加・駐車場の回答はこちら\n${url}`;
