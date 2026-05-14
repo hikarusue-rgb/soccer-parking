@@ -172,7 +172,7 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
   </div>);
 }
 // ── EVENT SCREEN ──
-function EventScreen({event,roster,responses,lottery,meetingPoints,selCarpoolSetup,carpoolRequests,setCarpoolRequests,carpoolMatching,onBack,onSubmit,onNav,onSaveCarpoolRequest,onCancelCarpoolRequest}){
+function EventScreen({event,roster,responses,lottery,meetingPoints,selCarpoolSetup,carpoolRequests,setCarpoolRequests,carpoolMatching,onBack,onSubmit,onNav,onSaveCarpoolRequest,onCancelCarpoolRequest,onSaveDriverSetup,onAddMeetingPoint}){
   const er=getEventRoster(roster,event||{});
   const myKey="parkingApp_myId";
   const[memberId,setMemberId]=useState(()=>localStorage.getItem(myKey)||"");
@@ -256,6 +256,16 @@ function EventScreen({event,roster,responses,lottery,meetingPoints,selCarpoolSet
     </div>}
 
     {lottery?.conducted&&<Btn variant="yellow" onClick={()=>onNav("results")} style={{marginBottom:12}}>🎉 抽選結果を見る</Btn>}
+
+    {/* Driver: register own meeting points */}
+    {lottery?.conducted&&memberId&&<DriverMeetingPointSection
+      event={event} memberId={memberId} roster={roster} responses={responses}
+      lottery={lottery} meetingPoints={meetingPoints||[]}
+      selCarpoolSetup={selCarpoolSetup||{}}
+      onSaveDriverSetup={onSaveDriverSetup}
+      onAddMeetingPoint={onAddMeetingPoint}
+    />}
+
     {lottery?.conducted&&selCarpoolSetup&&Object.keys(selCarpoolSetup).length>0&&<div style={{...S.cardLime,marginBottom:12}}><p style={{color:C.limeLight,fontSize:13,fontWeight:700}}>🚗 配車設定済み — 乗合申請が可能です</p></div>}
 
     {/* Registration section */}
@@ -381,6 +391,65 @@ function CarpoolSetupScreen({event,roster,responses,lottery,meetingPoints,carpoo
       </div>);
     })}
     <Btn onClick={doSave} disabled={saving}>{saving?"保存中...":"💾 配車設定を保存"}</Btn>
+  </div>);
+}
+
+// ── DRIVER MEETING POINT SECTION (当選者・確定者が自分の集合場所を登録) ──
+function DriverMeetingPointSection({event,memberId,roster,responses,lottery,meetingPoints,selCarpoolSetup,onSaveDriverSetup,onAddMeetingPoint}){
+  const confirmed=getConfirmed(event);
+  const winnerIds=lottery?.winners||[];
+  const isDriver=(confirmed.includes(memberId)||winnerIds.includes(memberId));
+  const myResp=responses?.[memberId];
+  const carpoolCap=myResp?.carpoolCapacity||0;
+  if(!isDriver||carpoolCap===0)return null;
+
+  const mySetup=selCarpoolSetup?.[memberId];
+  const[selectedMPs,setSelectedMPs]=useState(mySetup?.meetingPoints||[]);
+  const[newName,setNewName]=useState("");
+  const[saving,setSaving]=useState(false);
+  const[saved,setSaved]=useState(!!mySetup);
+
+  function toggleMP(mpId){
+    setSelectedMPs(p=>p.includes(mpId)?p.filter(x=>x!==mpId):[...p,mpId]);
+    setSaved(false);
+  }
+  async function handleAddNew(){
+    const name=newName.trim();
+    if(!name)return;
+    const newMP={id:uid(),name};
+    await onAddMeetingPoint(newMP);
+    setSelectedMPs(p=>[...p,newMP.id]);
+    setNewName("");
+    setSaved(false);
+  }
+  async function doSave(){
+    setSaving(true);
+    await onSaveDriverSetup(event.id,memberId,{capacity:carpoolCap,meetingPoints:selectedMPs});
+    setSaving(false);setSaved(true);
+  }
+
+  return(<div style={{...S.cardLock,marginTop:8}}>
+    <div style={{fontWeight:700,color:C.sky,marginBottom:4}}>🚗 集合場所の登録（車出し担当者専用）</div>
+    <div style={{color:C.dim,fontSize:12,marginBottom:10}}>乗合希望者が集まれる場所を選んでください（複数可）<br/>乗合可: <strong style={{color:C.sky}}>{carpoolCap}名</strong></div>
+    {meetingPoints.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+      {meetingPoints.map(mp=>{
+        const sel=selectedMPs.includes(mp.id);
+        return(<button key={mp.id} onClick={()=>toggleMP(mp.id)} style={{padding:"6px 14px",borderRadius:10,border:"none",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:sel?C.sky:"rgba(255,255,255,0.08)",color:sel?"#052e16":"rgba(255,255,255,0.5)",transition:"all .2s"}}>{mp.name}</button>);
+      })}
+    </div>}
+    <div style={{fontSize:12,color:C.dim,marginBottom:4}}>新しい集合場所を追加（次回以降も使えます）</div>
+    <div style={{display:"flex",gap:8,marginBottom:10}}>
+      <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="例：公園前" style={{...S.input,flex:1,padding:"8px 12px",fontSize:13}} onKeyDown={e=>e.key==="Enter"&&handleAddNew()}/>
+      <button onClick={handleAddNew} disabled={!newName.trim()} style={{...S.btnP,width:"auto",padding:"8px 14px",fontSize:13,opacity:newName.trim()?1:0.4}}>＋ 追加</button>
+    </div>
+    {saved?(
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{color:C.limeLight,fontSize:13,fontWeight:700}}>✅ 登録済み（{selectedMPs.map(id=>meetingPoints.find(m=>m.id===id)?.name).filter(Boolean).join(" / ")||"未選択"}）</span>
+        <button onClick={()=>setSaved(false)} style={S.btnSm}>変更</button>
+      </div>
+    ):(
+      <Btn onClick={doSave} disabled={saving||selectedMPs.length===0}>{saving?"保存中...":"💾 集合場所を登録する"}</Btn>
+    )}
   </div>);
 }
 
@@ -995,6 +1064,16 @@ function App(){
 
   async function handleSaveRoster(ro){editingRef.current=false;setRoster(ro);await fbSet("roster",ro)}
   async function handleSaveMeetingPoints(mps){setMeetingPoints(mps);await fbSet("meetingPoints",Object.fromEntries(mps.map(m=>[m.id,m])))}
+  async function handleAddMeetingPoint(mp){
+    const next=[...meetingPoints,mp];
+    setMeetingPoints(next);
+    await fbSet(`meetingPoints/${mp.id}`,mp);
+  }
+  async function handleSaveDriverSetup(eventId,driverId,setup){
+    const next={...allCarpoolSetup[eventId],[driverId]:setup};
+    await fbSet(`carpoolSetup/${eventId}/${driverId}`,setup);
+    setAllCarpoolSetup(p=>({...p,[eventId]:next}));
+  }
   async function handleSaveCarpoolSetup(eventId,setup){
     await fbSet(`carpoolSetup/${eventId}`,setup);
     setAllCarpoolSetup(p=>({...p,[eventId]:setup}));
@@ -1084,6 +1163,8 @@ function App(){
         onBack={()=>navigate("home")} onSubmit={handleSubmit} onNav={navigate}
         onSaveCarpoolRequest={(evId,mId,req)=>handleSaveCarpoolRequest(evId,mId,req)}
         onCancelCarpoolRequest={(evId,mId)=>handleCancelCarpoolRequest(evId,mId)}
+        onSaveDriverSetup={handleSaveDriverSetup}
+        onAddMeetingPoint={handleAddMeetingPoint}
       />}
       {screen==="admin"&&<AdminScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries}
         meetingPoints={meetingPoints} allCarpoolSetup={allCarpoolSetup}
