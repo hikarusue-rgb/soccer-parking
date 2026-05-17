@@ -279,7 +279,7 @@ function EventScreen({event,roster,responses,lottery,meetingPoints,selCarpoolSet
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
             <div style={{fontSize:13}}>{myResp.attending?"✅ 参加":"❌ 欠席"}</div>
-            {myResp.attending&&<div style={{fontSize:13,marginTop:4}}>{myResp.parkingNeeded?"🚗 駐車場希望":"🚶 駐車場不要"}</div>}
+            {myResp.attending&&<div style={{fontSize:13,marginTop:4}}>{myResp.parkingNeeded?`🚗 駐車場希望${myResp.carpoolCapacity>0?` (乗合+${myResp.carpoolCapacity})`:""}`:"🚶 駐車場不要"}</div>}
           </div>
           {!isPast?<button onClick={()=>setEditing(true)} style={S.btnSm}>内容を修正する</button>:<span style={{fontSize:11,color:C.amber}}>締切後のため修正不可</span>}
         </div>
@@ -304,7 +304,13 @@ function EventScreen({event,roster,responses,lottery,meetingPoints,selCarpoolSet
               </div>
             </div>
           ) : null}
-
+          {(parking===true||isConfirmed)&&<div style={{background:"rgba(255,255,255,0.05)",padding:12,borderRadius:12,marginTop:8}}>
+            <div style={{fontSize:12,color:C.dim,marginBottom:6}}>🚙 他の人を乗合できますか？</div>
+            <select value={carpool} onChange={e=>setCarpool(Number(e.target.value))} style={S.select}>
+              <option value={0}>乗合不可（自分の分のみ）</option>
+              {[1,2,3,4,5].map(n=><option key={n} value={n}>乗合可：{n}人まで</option>)}
+            </select>
+          </div>}
           {!isConfirmed&&<p style={{fontSize:12,color:C.dim,textAlign:"center",marginTop:8}}>抽選枠 {lottSlots}台・超過時はあみだくじ</p>}
         </div>}
         <ErrMsg msg={err}/>
@@ -520,7 +526,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
               <span style={{fontSize:13}}><span style={{color:C.dim,fontSize:11}}>#{r.num} </span>{r.name}</span>
               <div style={{display:"flex",gap:4}}>
                 {isCon&&<Tag label="🔒" color="sky"/>}
-                {!res?<Tag label="未回答" color="gray"/>:!res.attending?<Tag label="欠席" color="red"/>:<><Tag label="参加" color="lime"/>{res.parkingNeeded?<Tag label="🚗" color="amber"/>:<Tag label="🚶" color="white"/>}</>}
+                {!res?<Tag label="未回答" color="gray"/>:!res.attending?<Tag label="欠席" color="red"/>:<><Tag label="参加" color="lime"/>{res.parkingNeeded?<Tag label={`🚗${res.carpoolCapacity>0?` 乗合+${res.carpoolCapacity}`:""}`} color="amber"/>:<Tag label="🚶" color="white"/>}</>}
               </div>
             </div>)})}</div>
           {!lott?.conducted&&hopefuls>0&&<button onClick={()=>{onSelectEvent(ev.id);onRunLottery(ev.id)}} style={{...S.btnY,marginTop:4}}>🎰 {ev.title} を抽選する</button>}
@@ -619,7 +625,9 @@ function ResultsScreen({event,roster,responses,lottery,onBack}){
   function genText(){
     const L=[`⚽ 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`,"━━━━━━━━━━━━"];
     const formatName = (user) => {
-      return `#${user.num} ${user.name}`;
+      const res = responses[user.id];
+      const carpool = res && res.carpoolCapacity > 0 ? `(乗合+${res.carpoolCapacity})` : "";
+      return `#${user.num} ${user.name}${carpool}`;
     };
     if(confirmedMembers.length||winners.length){
       L.push(`🚗 【車を出す方】`);
