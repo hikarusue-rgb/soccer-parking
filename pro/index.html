@@ -260,7 +260,7 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
   </div>);
 }
 // ── EVENT SCREEN ──
-function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCarpoolAmida}){
+function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCarpoolAmida,onSaveCarpool}){
   const er=getEventRoster(roster,event||{});
   const myKey="parkingApp_myId";
   const[memberId,setMemberId]=useState(()=>localStorage.getItem(myKey)||"");
@@ -270,6 +270,9 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
   const[meetingPoint,setMeetingPoint]=useState("");
   const[wish1,setWish1]=useState("");
   const[wish2,setWish2]=useState("");
+  const[driverMpInput,setDriverMpInput]=useState("");
+  const[loserWishes,setLoserWishes]=useState([]);
+  const[savingCarpool,setSavingCarpool]=useState(false);
   const[err,setErr]=useState("");
   const[saving,setSaving]=useState(false);
   const[done,setDone]=useState(false);
@@ -284,6 +287,8 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
         setAttending(prev.attending);setParking(prev.parkingNeeded||false);setCarpool(prev.carpoolCapacity||0);
         setMeetingPoint(prev.meetingPoint||"");
         setWish1(prev.carpoolWishes?.[0]||"");setWish2(prev.carpoolWishes?.[1]||"");
+        setDriverMpInput(prev.meetingPoint||"");
+        setLoserWishes(prev.carpoolWishes||[]);
       }
     }
   },[event?.id]);
@@ -307,8 +312,10 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       setAttending(prev.attending);setParking(prev.parkingNeeded||false);setCarpool(prev.carpoolCapacity||0);
       setMeetingPoint(prev.meetingPoint||"");
       setWish1(prev.carpoolWishes?.[0]||"");setWish2(prev.carpoolWishes?.[1]||"");
+      setDriverMpInput(prev.meetingPoint||"");
+      setLoserWishes(prev.carpoolWishes||[]);
     }
-    else{setAttending(null);setParking(null);setCarpool(0);setMeetingPoint("");setWish1("");setWish2("")}
+    else{setAttending(null);setParking(null);setCarpool(0);setMeetingPoint("");setWish1("");setWish2("");setDriverMpInput("");setLoserWishes([])}
     setEditing(false);setDone(false);
   }
 
@@ -320,15 +327,27 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
     const parkingNeeded=attending?(isConfirmed?true:parking):false;
     const cap=attending&&(isConfirmed||parking)?carpool:0;
     const payload={memberId,attending,parkingNeeded,carpoolCapacity:cap};
-    if(event.carpoolEnabled&&attending){
-      if(cap>0)payload.meetingPoint=meetingPoint.trim();
-      if(parkingNeeded){
-        const w=[wish1.trim(),wish2.trim()].filter(Boolean);
-        payload.carpoolWishes=w;
-      }
-    }
     await onSubmit(event.id,payload);
     setSaving(false);setDone(true);setEditing(false);
+  }
+
+  async function saveDriverMeetingPoint(){
+    if(!driverMpInput.trim()){setErr("集合場所を入力してください");return}
+    setErr("");setSavingCarpool(true);
+    await onSaveCarpool(event.id,memberId,{meetingPoint:driverMpInput.trim()});
+    setSavingCarpool(false);
+  }
+  async function saveLoserWishes(){
+    setErr("");setSavingCarpool(true);
+    await onSaveCarpool(event.id,memberId,{carpoolWishes:loserWishes.slice(0,2)});
+    setSavingCarpool(false);
+  }
+  function toggleWish(mp){
+    setLoserWishes(prev=>{
+      if(prev.includes(mp))return prev.filter(x=>x!==mp);
+      if(prev.length>=2)return [prev[1],mp];
+      return [...prev,mp];
+    });
   }
 
   function copyReminder(){
@@ -402,28 +421,88 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
     {lottery?.conducted&&<Btn variant="yellow" onClick={()=>onNav("results")} style={{marginBottom:12}}>🎉 抽選結果を見る</Btn>}
 
     {event.carpoolEnabled&&lottery?.conducted&&(()=>{
+      const winnersList=lottery.winners||[];
+      const isMyWinner=memberId&&(winnersList.includes(memberId)||confirmed.includes(memberId));
+      const myAttending=memberId&&responses[memberId]?.attending;
+      const myCap=memberId?(responses[memberId]?.carpoolCapacity||0):0;
+      const myParking=memberId&&responses[memberId]?.parkingNeeded;
+      const isMyDriver=isMyWinner&&myAttending&&myCap>0;
+      const isMyLoser=memberId&&!isMyWinner&&myAttending&&myParking;
+      const publicPoints=Object.entries(responses).filter(([id,r])=>r.attending&&r.meetingPoint&&(winnersList.includes(id)||confirmed.includes(id))&&r.carpoolCapacity>0).map(([id,r])=>r.meetingPoint.trim()).filter((v,i,a)=>a.indexOf(v)===i);
       const m=computeCarpoolMatching(event,responses,lottery);
-      if(!m||(m.points.length===0&&m.unmatched.length===0))return null;
-      return <div style={{...S.card,borderColor:"rgba(132,204,22,0.4)",background:"rgba(132,204,22,0.05)"}}>
-        <div style={{fontWeight:900,color:C.limeLight,marginBottom:12}}>🚙 配車マッチング</div>
-        {m.points.map(p=><div key={p.meetingPoint} style={{background:"rgba(0,0,0,0.2)",borderRadius:12,padding:12,marginBottom:8}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:8}}>📍 {p.meetingPoint}</div>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚗 ドライバー（座席計{p.totalCapacity}）</div>
-          {p.drivers.map(d=>{const m=roster.find(r=>r.id===d.id);return m?<div key={d.id} style={{fontSize:13,color:C.amber,marginBottom:2}}>・#{m.num} {m.name}（{d.capacity}席）</div>:null})}
-          <div style={{fontSize:11,color:C.dim,marginTop:8,marginBottom:4}}>🚙 乗合希望者（{p.riders.length}名）{p.overflow&&<span style={{color:"#f87171",fontWeight:700,marginLeft:4}}>⚠️ 定員オーバー</span>}</div>
-          {p.riders.map(r=>{const me=roster.find(x=>x.id===r.id);if(!me)return null;
-            const isAssigned=(p.assigned||[]).includes(r.id);
-            return <div key={r.id} style={{fontSize:13,color:isAssigned?C.limeLight:C.muted,marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
-              <span>{isAssigned?"✅":"❓"}</span><span>#{me.num} {me.name}</span>
-            </div>})}
-          {p.overflow&&!p.assigned&&onCarpoolAmida&&<Btn variant="yellow" onClick={()=>onCarpoolAmida(event.id,p.meetingPoint,p.riders.map(r=>r.id),p.totalCapacity)} style={{marginTop:8}}>🎰 あみだで乗車者を決定</Btn>}
-        </div>)}
-        {m.unmatched.length>0&&<div style={{background:"rgba(239,68,68,0.08)",borderRadius:12,padding:12,marginTop:8}}>
-          <div style={{fontSize:12,color:"#f87171",fontWeight:700,marginBottom:4}}>⚠️ 乗合未成立 {m.unmatched.length}名</div>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>希望集合場所にドライバーがいません</div>
-          {m.unmatched.map(id=>{const me=roster.find(r=>r.id===id);return me?<div key={id} style={{fontSize:12,color:C.muted}}>・#{me.num} {me.name}</div>:null})}
+      const hasMatching=m&&(m.points.length>0||m.unmatched.length>0);
+      const myMpSaved=!!responses[memberId]?.meetingPoint;
+      const myWishesSaved=(responses[memberId]?.carpoolWishes||[]).length>0;
+      return <>
+        {isMyDriver&&<div style={{...S.card,borderColor:"rgba(245,158,11,0.4)",background:"rgba(245,158,11,0.05)"}}>
+          <div style={{fontWeight:900,color:C.amber,marginBottom:8}}>🚗 集合場所を登録（あなたはドライバー）</div>
+          <p style={{fontSize:11,color:C.dim,marginBottom:10}}>登録した集合場所は乗合希望者の公募リストに表示されます</p>
+          <input value={driverMpInput} onChange={e=>setDriverMpInput(e.target.value)} placeholder="例：○○駅 西口 7:30" style={{...S.input,marginBottom:8}} autoComplete="off"/>
+          <Btn variant="yellow" onClick={saveDriverMeetingPoint} disabled={savingCarpool}>{savingCarpool?"保存中...":myMpSaved?"💾 集合場所を更新":"💾 集合場所を登録"}</Btn>
+          {myMpSaved&&<p style={{color:C.limeLight,fontSize:11,marginTop:6,textAlign:"center"}}>✅ 現在の登録: {responses[memberId].meetingPoint}</p>}
         </div>}
-      </div>;
+
+        {isMyLoser&&<div style={{...S.card,borderColor:"rgba(56,189,248,0.4)",background:"rgba(56,189,248,0.05)"}}>
+          <div style={{fontWeight:900,color:C.sky,marginBottom:8}}>🚙 乗合希望を選択（最大2箇所）</div>
+          {publicPoints.length===0?<p style={{fontSize:12,color:C.dim}}>ドライバーがまだ集合場所を登録していません。しばらくお待ちください。</p>
+            :<>
+              <p style={{fontSize:11,color:C.dim,marginBottom:10}}>乗合できる集合場所を最大2箇所選択してください</p>
+              {publicPoints.map(mp=>{
+                const dlist=Object.entries(responses).filter(([id,r])=>r.meetingPoint?.trim()===mp&&(winnersList.includes(id)||confirmed.includes(id))&&r.carpoolCapacity>0);
+                const cap=dlist.reduce((s,[id,r])=>s+r.carpoolCapacity,0);
+                const sel=loserWishes.includes(mp);
+                return <button key={mp} onClick={()=>toggleWish(mp)} style={{display:"block",width:"100%",textAlign:"left",background:sel?"rgba(56,189,248,0.2)":"rgba(255,255,255,0.05)",border:sel?"2px solid #38bdf8":"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 12px",marginBottom:6,color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
+                  <div style={{fontSize:13,fontWeight:700}}>{sel?"✅ ":"⬜ "}📍 {mp}</div>
+                  <div style={{fontSize:11,color:C.dim,marginTop:2}}>ドライバー{dlist.length}名・座席計{cap}</div>
+                </button>;
+              })}
+              <Btn variant="yellow" onClick={saveLoserWishes} disabled={savingCarpool||loserWishes.length===0} style={{marginTop:6}}>{savingCarpool?"保存中...":myWishesSaved?"💾 希望を更新":"💾 希望を登録"}</Btn>
+              {myWishesSaved&&<p style={{color:C.limeLight,fontSize:11,marginTop:6,textAlign:"center"}}>✅ 現在の希望: {(responses[memberId].carpoolWishes||[]).join(" / ")}</p>}
+            </>}
+        </div>}
+
+        {hasMatching&&<div style={{...S.card,borderColor:"rgba(132,204,22,0.4)",background:"rgba(132,204,22,0.05)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{fontWeight:900,color:C.limeLight}}>🚙 配車マッチング</div>
+            <button onClick={()=>{
+              const L=[`🚙 配車マッチング結果`,`📌 ${event.title}`,`🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}`];
+              if(event.location){L.push(`📍 ${event.location}`);L.push(`🗺 ${mapUrl(event.location)}`)}
+              L.push("━━━━━━━━━━━━");
+              m.points.forEach(p=>{
+                L.push(`📍 ${p.meetingPoint}`);
+                p.drivers.forEach(d=>{const dm=roster.find(r=>r.id===d.id);if(dm)L.push(`  🚗 #${dm.num} ${dm.name}（${d.capacity}席）`)});
+                const assignedIds=p.assigned||(p.overflow?[]:p.riders.map(r=>r.id));
+                if(assignedIds.length){L.push(`  ✅ 乗車: `+assignedIds.map(id=>{const me=roster.find(r=>r.id===id);return me?`#${me.num} ${me.name}`:""}).filter(Boolean).join(", "))}
+                if(p.overflow&&!p.assigned)L.push(`  ⚠️ 定員オーバー（あみだ未実施）`);
+                L.push("");
+              });
+              if(m.unmatched.length){L.push("⚠️ 未成立");m.unmatched.forEach(id=>{const me=roster.find(r=>r.id===id);if(me)L.push(`  ・#${me.num} ${me.name}`)})}
+              const txt=L.join("\n");
+              if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
+              else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
+                const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！");
+              })}
+            }} style={S.btnSm}>📋 LINE共有</button>
+          </div>
+          {m.points.map(p=><div key={p.meetingPoint} style={{background:"rgba(0,0,0,0.2)",borderRadius:12,padding:12,marginBottom:8}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:8}}>📍 {p.meetingPoint}</div>
+            <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚗 ドライバー（座席計{p.totalCapacity}）</div>
+            {p.drivers.map(d=>{const mm=roster.find(r=>r.id===d.id);return mm?<div key={d.id} style={{fontSize:13,color:C.amber,marginBottom:2}}>・#{mm.num} {mm.name}（{d.capacity}席）</div>:null})}
+            <div style={{fontSize:11,color:C.dim,marginTop:8,marginBottom:4}}>🚙 乗合希望者（{p.riders.length}名）{p.overflow&&<span style={{color:"#f87171",fontWeight:700,marginLeft:4}}>⚠️ 定員オーバー</span>}</div>
+            {p.riders.map(r=>{const me=roster.find(x=>x.id===r.id);if(!me)return null;
+              const isAssigned=(p.assigned||[]).includes(r.id)||(!p.overflow&&!p.assigned);
+              return <div key={r.id} style={{fontSize:13,color:isAssigned?C.limeLight:C.muted,marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
+                <span>{isAssigned?"✅":"❓"}</span><span>#{me.num} {me.name}</span>
+              </div>})}
+            {p.overflow&&!p.assigned&&onCarpoolAmida&&<Btn variant="yellow" onClick={()=>onCarpoolAmida(event.id,p.meetingPoint,p.riders.map(r=>r.id),p.totalCapacity)} style={{marginTop:8}}>🎰 あみだで乗車者を決定</Btn>}
+          </div>)}
+          {m.unmatched.length>0&&<div style={{background:"rgba(239,68,68,0.08)",borderRadius:12,padding:12,marginTop:8}}>
+            <div style={{fontSize:12,color:"#f87171",fontWeight:700,marginBottom:4}}>⚠️ 乗合未成立 {m.unmatched.length}名</div>
+            <div style={{fontSize:11,color:C.dim,marginBottom:4}}>希望集合場所にドライバーがいません</div>
+            {m.unmatched.map(id=>{const me=roster.find(r=>r.id===id);return me?<div key={id} style={{fontSize:12,color:C.muted}}>・#{me.num} {me.name}</div>:null})}
+          </div>}
+        </div>}
+      </>;
     })()}
 
     {/* Registration section */}
@@ -479,16 +558,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
               <option value={0}>乗合不可（自分の分のみ）</option>
               {[1,2,3,4,5].map(n=><option key={n} value={n}>乗合可：{n}人まで</option>)}
             </select>
-            {event.carpoolEnabled&&carpool>0&&<div style={{marginTop:10}}>
-              <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚗 集合場所（乗合する人と待ち合わせる場所）</div>
-              <input value={meetingPoint} onChange={e=>setMeetingPoint(e.target.value)} placeholder="例：○○駅 西口 7:30" style={S.input} autoComplete="off"/>
-            </div>}
-          </div>}
-          {event.carpoolEnabled&&(parking===true||isConfirmed)&&<div style={{background:"rgba(132,204,22,0.05)",padding:12,borderRadius:12,marginTop:8,border:"1px dashed rgba(132,204,22,0.25)"}}>
-            <div style={{fontSize:12,color:C.limeLight,marginBottom:6,fontWeight:700}}>🚙 落選した場合の乗合希望（任意・最大2箇所）</div>
-            <div style={{fontSize:10,color:C.dim,marginBottom:8}}>抽選で外れた場合に、ここで指定した集合場所のドライバーと乗合できるかマッチングされます</div>
-            <input value={wish1} onChange={e=>setWish1(e.target.value)} placeholder="希望集合場所1（例：○○駅）" style={{...S.input,marginBottom:6}} autoComplete="off"/>
-            <input value={wish2} onChange={e=>setWish2(e.target.value)} placeholder="希望集合場所2（例：△△公園）" style={S.input} autoComplete="off"/>
+            {event.carpoolEnabled&&carpool>0&&<p style={{fontSize:11,color:C.dim,marginTop:8,lineHeight:1.5}}>※ 集合場所は駐車場抽選後に登録できます</p>}
           </div>}
           {!isConfirmed&&<p style={{fontSize:12,color:C.dim,textAlign:"center",marginTop:8}}>抽選枠 {lottSlots}台・超過時はあみだくじ</p>}
         </div>}
@@ -1017,12 +1087,18 @@ function App(){
     await Promise.all([fbDel(`responses/${id}`),fbDel(`lotteries/${id}`)]);
   }
   async function handleSubmit(eventId,payload){
-    const{memberId,attending,parkingNeeded,carpoolCapacity,meetingPoint,carpoolWishes}=payload;
-    const entry={attending,parkingNeeded,carpoolCapacity,at:Date.now()};
-    if(meetingPoint!==undefined)entry.meetingPoint=meetingPoint||"";
-    if(carpoolWishes!==undefined)entry.carpoolWishes=carpoolWishes;
+    const{memberId,attending,parkingNeeded,carpoolCapacity}=payload;
+    const prev=(allResponses[eventId]||{})[memberId]||{};
+    const entry={...prev,attending,parkingNeeded,carpoolCapacity,at:Date.now()};
     await fbSet(`responses/${eventId}/${memberId}`,entry);
-    setAllResponses(prev=>({...prev,[eventId]:{...(prev[eventId]||{}),[memberId]:entry}}));
+    setAllResponses(p=>({...p,[eventId]:{...(p[eventId]||{}),[memberId]:entry}}));
+  }
+  async function handleSaveCarpool(eventId,memberId,carpoolData){
+    const current=(allResponses[eventId]||{})[memberId];
+    if(!current){alert("先に出欠登録をしてください");return}
+    const updated={...current,...carpoolData,at:Date.now()};
+    await fbSet(`responses/${eventId}/${memberId}`,updated);
+    setAllResponses(p=>({...p,[eventId]:{...(p[eventId]||{}),[memberId]:updated}}));
   }
   async function handleResetResponses(eventId){
     await fbDel(`responses/${eventId}`);await fbDel(`lotteries/${eventId}`);
@@ -1101,7 +1177,7 @@ function App(){
     <div style={{maxWidth:460,margin:"0 auto",paddingTop:24}}>
       {screen==="home"&&<HomeScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries} onNav={navigate} onSelectEvent={setSelectedEventId} loading={dataLoading}/>}
       {screen==="event"&&<EventScreen event={selEv} roster={roster} responses={selResp} lottery={selLott}
-        onBack={()=>navigate("home")} onSubmit={handleSubmit} onNav={navigate} onCarpoolAmida={handleCarpoolAmida}
+        onBack={()=>navigate("home")} onSubmit={handleSubmit} onNav={navigate} onCarpoolAmida={handleCarpoolAmida} onSaveCarpool={handleSaveCarpool}
       />}
       {screen==="admin"&&<AdminScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries}
         onSelectEvent={setSelectedEventId} onSaveEvent={handleSaveEvent} onDeleteEvent={handleDeleteEvent}
