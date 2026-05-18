@@ -38,9 +38,21 @@ const{useState,useEffect,useRef,useCallback}=React;
 
 // ── Firebase ──
 const FB="https://soccer-parking-default-rtdb.asia-southeast1.firebasedatabase.app/pro";
+const STORAGE_BUCKET="soccer-parking-default.firebasestorage.app";
 async function fbGet(p){try{const r=await fetch(`${FB}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbGet:",e);return undefined}}
 async function fbSet(p,v){try{await fetch(`${FB}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbSet:",e)}}
 async function fbDel(p){try{await fetch(`${FB}/${p}.json`,{method:"DELETE"})}catch(e){console.error("fbDel:",e)}}
+async function storageUpload(file,path){
+  const url=`https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o?uploadType=media&name=${encodeURIComponent(path)}`;
+  const r=await fetch(url,{method:"POST",headers:{"Content-Type":file.type||"application/octet-stream"},body:file});
+  if(!r.ok){const t=await r.text();throw new Error(`Storage upload failed (${r.status}): ${t}`)}
+  const d=await r.json();
+  const tok=d.downloadTokens;
+  return{path:d.name,downloadUrl:`https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodeURIComponent(d.name)}?alt=media&token=${tok}`};
+}
+async function storageDelete(path){
+  try{await fetch(`https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodeURIComponent(path)}`,{method:"DELETE"})}catch(e){console.error("storageDelete:",e)}
+}
 function uid(){return Math.random().toString(36).slice(2,9)}
 
 // ── Default ──
@@ -83,18 +95,28 @@ function getTimeLeft(dl){const d=new Date(dl)-new Date();if(d<=0)return null;con
 function getEventRoster(roster,ev){const g=ev.inviteGrades||[...new Set(roster.map(r=>r.grade||"4年"))];return roster.filter(r=>g.includes(r.grade||"4年"))}
 function getConfirmed(ev){return ev.confirmedParking||[]}
 function getLotterySlots(ev){return Math.max(0,(ev.parkingLimit||0)-getConfirmed(ev).length)}
+function mapUrl(loc){return loc?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}`:""}
+function parkingUrl(loc){return loc?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc+" コインパーキング")}`:""}
 function fmtMatchDetails(ev){
   const lines=[];
   if(ev.opponent)lines.push(`🆚 ${ev.opponent}`);
-  if(ev.location)lines.push(`📍 ${ev.location}`);
-  if(ev.meetTime||ev.kickoffTime){
+  if(ev.location){
+    lines.push(`📍 ${ev.location}`);
+    lines.push(`🗺 ${mapUrl(ev.location)}`);
+  }
+  if(ev.meetTime||ev.kickoffTime||ev.endTime){
     const parts=[];
     if(ev.meetTime)parts.push(`集合${ev.meetTime}`);
     if(ev.kickoffTime)parts.push(`KO${ev.kickoffTime}`);
+    if(ev.endTime)parts.push(`終了${ev.endTime}`);
     lines.push(`⏰ ${parts.join(" / ")}`);
   }
   if(ev.uniformColor)lines.push(`👕 ${ev.uniformColor}`);
   if(ev.notes)lines.push(`📝 ${ev.notes}`);
+  if(ev.attachments&&ev.attachments.length){
+    lines.push(`📎 添付ファイル:`);
+    ev.attachments.forEach(a=>lines.push(`  ${a.name}: ${a.url}`));
+  }
   return lines.length?lines.join("\n"):"";
 }
 
@@ -149,10 +171,10 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
             {ev.matchDate&&<div style={{color:C.limeLight,fontSize:12,fontWeight:700,marginTop:2}}>🗓 {fmtDate(ev.matchDate)}</div>}
           </div>{badge}
         </div>
-        {(ev.opponent||ev.location||ev.meetTime||ev.kickoffTime||ev.uniformColor)&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8,fontSize:12,color:C.muted}}>
+        {(ev.opponent||ev.location||ev.meetTime||ev.kickoffTime||ev.endTime||ev.uniformColor)&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8,fontSize:12,color:C.muted}}>
           {ev.opponent&&<span>🆚 {ev.opponent}</span>}
           {ev.location&&<span>📍 {ev.location}</span>}
-          {(ev.meetTime||ev.kickoffTime)&&<span>⏰ {ev.meetTime?`集合${ev.meetTime}`:""}{ev.meetTime&&ev.kickoffTime?" / ":""}{ev.kickoffTime?`KO${ev.kickoffTime}`:""}</span>}
+          {(ev.meetTime||ev.kickoffTime||ev.endTime)&&<span>⏰ {[ev.meetTime&&`集合${ev.meetTime}`,ev.kickoffTime&&`KO${ev.kickoffTime}`,ev.endTime&&`終了${ev.endTime}`].filter(Boolean).join(" / ")}</span>}
           {ev.uniformColor&&<span>👕 {ev.uniformColor}</span>}
         </div>}
         <div style={{display:"flex",gap:8,marginBottom:8}}>
@@ -258,7 +280,7 @@ function EventScreen({event,roster,responses,lottery,meetingPoints,selCarpoolSet
   return(<div>
     <BackBar title={event.title} onBack={onBack} label="← 一覧"/>
 
-    {(event.opponent||event.location||event.meetTime||event.kickoffTime||event.uniformColor||event.notes)&&<div style={{...S.card,borderColor:"rgba(56,189,248,0.3)"}}>
+    {(event.opponent||event.location||event.meetTime||event.kickoffTime||event.endTime||event.uniformColor||event.notes||(event.attachments&&event.attachments.length))&&<div style={{...S.card,borderColor:"rgba(56,189,248,0.3)"}}>
       <div style={{fontSize:12,color:C.dim,marginBottom:10,fontWeight:700}}>📋 試合要項</div>
       {event.opponent&&<div style={{marginBottom:10}}>
         <div style={{fontSize:11,color:C.dim,marginBottom:2}}>🆚 対戦相手</div>
@@ -268,21 +290,26 @@ function EventScreen({event,roster,responses,lottery,meetingPoints,selCarpoolSet
         <div style={{fontSize:11,color:C.dim,marginBottom:2}}>📍 会場</div>
         <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>{event.location}</div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`,"_blank","noopener,noreferrer")} style={{...S.btnSm,flex:1}}>🗺 会場の地図</button>
-          <button onClick={()=>window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location+" コインパーキング")}`,"_blank","noopener,noreferrer")} style={{...S.btnSm,flex:1}}>🅿️ 周辺の駐車場</button>
+          <button onClick={()=>window.open(mapUrl(event.location),"_blank","noopener,noreferrer")} style={{...S.btnSm,flex:1}}>🗺 会場の地図</button>
+          <button onClick={()=>window.open(parkingUrl(event.location),"_blank","noopener,noreferrer")} style={{...S.btnSm,flex:1}}>🅿️ 周辺の駐車場</button>
         </div>
       </div>}
-      {(event.meetTime||event.kickoffTime)&&<div style={{marginBottom:10,display:"flex",gap:16}}>
+      {(event.meetTime||event.kickoffTime||event.endTime)&&<div style={{marginBottom:10,display:"flex",gap:16,flexWrap:"wrap"}}>
         {event.meetTime&&<div><div style={{fontSize:11,color:C.dim}}>⏰ 集合</div><div style={{fontSize:15,fontWeight:700}}>{event.meetTime}</div></div>}
         {event.kickoffTime&&<div><div style={{fontSize:11,color:C.dim}}>⚽ キックオフ</div><div style={{fontSize:15,fontWeight:700}}>{event.kickoffTime}</div></div>}
+        {event.endTime&&<div><div style={{fontSize:11,color:C.dim}}>🏁 終了予定</div><div style={{fontSize:15,fontWeight:700}}>{event.endTime}</div></div>}
       </div>}
       {event.uniformColor&&<div style={{marginBottom:10}}>
         <div style={{fontSize:11,color:C.dim,marginBottom:2}}>👕 ユニフォーム</div>
         <div style={{fontSize:15,fontWeight:700}}>{event.uniformColor}</div>
       </div>}
-      {event.notes&&<div>
+      {event.notes&&<div style={{marginBottom:10}}>
         <div style={{fontSize:11,color:C.dim,marginBottom:2}}>📝 備考</div>
         <div style={{fontSize:13,whiteSpace:"pre-wrap",lineHeight:1.5}}>{event.notes}</div>
+      </div>}
+      {event.attachments&&event.attachments.length>0&&<div>
+        <div style={{fontSize:11,color:C.dim,marginBottom:6}}>📎 添付ファイル</div>
+        {event.attachments.map(a=><a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" style={{display:"block",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"10px 12px",marginBottom:4,color:C.limeLight,fontSize:13,textDecoration:"none",fontWeight:700}}>📄 {a.name}<span style={{color:C.dim,fontSize:11,fontWeight:400,marginLeft:6}}>({Math.ceil(a.size/1024)}KB)</span></a>)}
       </div>}
     </div>}
 
@@ -423,10 +450,11 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
   const[evConfirmed,setEvConfirmed]=useState([]);
   const[evGrades,setEvGrades]=useState([]);
   const[detailsOpen,setDetailsOpen]=useState(false);
+  const[uploading,setUploading]=useState(false);
 
   useEffect(()=>{
     if(editEv){
-      const hasDetails=!!(editEv.opponent||editEv.location||editEv.kickoffTime||editEv.meetTime||editEv.uniformColor||editEv.notes);
+      const hasDetails=!!(editEv.opponent||editEv.location||editEv.kickoffTime||editEv.meetTime||editEv.endTime||editEv.uniformColor||editEv.notes||(editEv.attachments&&editEv.attachments.length));
       setDetailsOpen(hasDetails);
     }
   },[editEv?.id]);
@@ -509,23 +537,51 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
           <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📍 会場</div>
           <input value={editEv.location||""} onChange={e=>updateEv("location",e.target.value)} placeholder="例：中央公園グラウンド" style={S.input} autoComplete="off"/>
         </div>
-        <div style={{display:"flex",gap:8,marginBottom:10}}>
-          <div style={{flex:1}}>
-            <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⏰ 集合時刻</div>
-            <input type="time" value={editEv.meetTime||""} onChange={e=>updateEv("meetTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
-          </div>
-          <div style={{flex:1}}>
-            <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⚽ キックオフ</div>
-            <input type="time" value={editEv.kickoffTime||""} onChange={e=>updateEv("kickoffTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
-          </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⏰ 集合時刻</div>
+          <input type="time" value={editEv.meetTime||""} onChange={e=>updateEv("meetTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⚽ キックオフ</div>
+          <input type="time" value={editEv.kickoffTime||""} onChange={e=>updateEv("kickoffTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🏁 終了予定</div>
+          <input type="time" value={editEv.endTime||""} onChange={e=>updateEv("endTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
         </div>
         <div style={{marginBottom:10}}>
           <div style={{fontSize:11,color:C.dim,marginBottom:4}}>👕 ユニフォーム色</div>
           <input value={editEv.uniformColor||""} onChange={e=>updateEv("uniformColor",e.target.value)} placeholder="例：白 / 紺" style={S.input} autoComplete="off"/>
         </div>
-        <div>
+        <div style={{marginBottom:10}}>
           <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📝 備考</div>
           <textarea value={editEv.notes||""} onChange={e=>updateEv("notes",e.target.value)} placeholder="その他連絡事項" rows={3} style={{...S.input,resize:"vertical",minHeight:60,fontFamily:"inherit"}}/>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📎 添付ファイル（試合要綱 PDF など）</div>
+          {(editEv.attachments||[]).map(a=><div key={a.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"8px 12px",marginBottom:6}}>
+            <a href={a.url} target="_blank" rel="noopener noreferrer" style={{color:C.limeLight,fontSize:13,textDecoration:"none",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📄 {a.name} <span style={{color:C.dim,fontSize:11}}>({Math.ceil(a.size/1024)}KB)</span></a>
+            <button onClick={async()=>{
+              if(a.path)await storageDelete(a.path);
+              updateEv("attachments",(editEv.attachments||[]).filter(x=>x.id!==a.id));
+            }} style={{background:"rgba(239,68,68,0.15)",border:"none",color:"rgba(248,113,113,0.7)",fontSize:14,cursor:"pointer",padding:"4px 10px",borderRadius:6,marginLeft:8}}>×</button>
+          </div>)}
+          <label style={{display:"block",background:"rgba(132,204,22,0.1)",border:"1px dashed rgba(132,204,22,0.3)",borderRadius:12,color:C.limeLight,fontSize:13,cursor:uploading?"wait":"pointer",padding:"12px",textAlign:"center",fontFamily:"inherit"}}>
+            {uploading?"⏳ アップロード中...":"＋ ファイルを選択"}
+            <input type="file" disabled={uploading} onChange={async e=>{
+              const file=e.target.files?.[0];if(!file)return;
+              e.target.value="";
+              if(file.size>20*1024*1024){alert("⚠️ ファイルサイズは 20MB 以下にしてください");return}
+              setUploading(true);
+              try{
+                const path=`events/${editEv.id}/${Date.now()}_${file.name}`;
+                const{path:up,downloadUrl}=await storageUpload(file,path);
+                const next=[...(editEv.attachments||[]),{id:uid(),name:file.name,size:file.size,mime:file.type,path:up,url:downloadUrl}];
+                updateEv("attachments",next);
+              }catch(err){alert("アップロード失敗: "+err.message+"\n\nFirebase Storage が有効化されていないか、セキュリティルールでアクセスが拒否されています。")}
+              setUploading(false);
+            }} style={{display:"none"}}/>
+          </label>
         </div>
       </div>}
     </div>
@@ -717,7 +773,9 @@ function ResultsScreen({event,roster,responses,lottery,onBack}){
   const noReply=er.filter(r=>!responses[r.id]);
 
   function genText(){
-    const L=[`⚽ 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`,"━━━━━━━━━━━━"];
+    const L=[`⚽ 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`];
+    if(event?.location){L.push(`📍 ${event.location}`);L.push(`🗺 ${mapUrl(event.location)}`)}
+    L.push("━━━━━━━━━━━━");
     const formatName = (user) => {
       const res = responses[user.id];
       const carpool = res && res.carpoolCapacity > 0 ? `(乗合+${res.carpoolCapacity})` : "";
@@ -832,10 +890,12 @@ function App(){
     if(!allResponses[ev.id])setAllResponses(p=>({...p,[ev.id]:{}}));
   }
   async function handleDeleteEvent(id){
+    const target=events.find(e=>e.id===id);
     const next=events.filter(e=>e.id!==id);setEvents(next);await fbSet("events",next);
     setAllResponses(p=>{const n={...p};delete n[id];return n});
     setAllLotteries(p=>{const n={...p};delete n[id];return n});
     await Promise.all([fbDel(`responses/${id}`),fbDel(`lotteries/${id}`)]);
+    if(target?.attachments){for(const a of target.attachments){if(a.path)await storageDelete(a.path)}}
   }
   async function handleSubmit(eventId,{memberId,attending,parkingNeeded,carpoolCapacity}){
     const entry={attending,parkingNeeded,carpoolCapacity,at:Date.now()};
