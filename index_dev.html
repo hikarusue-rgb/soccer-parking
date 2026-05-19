@@ -37,10 +37,39 @@
 const{useState,useEffect,useRef,useCallback}=React;
 
 // ── Firebase ──
-const FB="https://soccer-parking-default-rtdb.asia-southeast1.firebasedatabase.app/dev";
-async function fbGet(p){try{const r=await fetch(`${FB}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbGet:",e);return undefined}}
-async function fbSet(p,v){try{await fetch(`${FB}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbSet:",e)}}
-async function fbDel(p){try{await fetch(`${FB}/${p}.json`,{method:"DELETE"})}catch(e){console.error("fbDel:",e)}}
+const FB_ROOT="https://soccer-parking-default-rtdb.asia-southeast1.firebasedatabase.app/dev";
+let TEAM_ID=null;
+(function initTeamId(){
+  const u=new URLSearchParams(window.location.search).get("team");
+  if(u){TEAM_ID=u;localStorage.setItem("parkingApp_teamId",u)}
+  else TEAM_ID=localStorage.getItem("parkingApp_teamId")||null;
+})();
+function getFB(){return TEAM_ID?`${FB_ROOT}/teams/${TEAM_ID}`:FB_ROOT}
+function setTeamId(id){TEAM_ID=id;if(id)localStorage.setItem("parkingApp_teamId",id);else localStorage.removeItem("parkingApp_teamId")}
+async function fbGet(p){try{const r=await fetch(`${getFB()}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbGet:",e);return undefined}}
+async function fbSet(p,v){try{await fetch(`${getFB()}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbSet:",e)}}
+async function fbDel(p){try{await fetch(`${getFB()}/${p}.json`,{method:"DELETE"})}catch(e){console.error("fbDel:",e)}}
+async function fbRootGet(p){try{const r=await fetch(`${FB_ROOT}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbRootGet:",e);return undefined}}
+async function fbRootSet(p,v){try{await fetch(`${FB_ROOT}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbRootSet:",e)}}
+async function checkTeamExists(id){const r=await fetch(`${FB_ROOT}/teams/${id}/meta.json`);if(!r.ok)return null;const d=await r.json();return d||null}
+async function createTeam(name){
+  const id=Math.random().toString(36).slice(2,8).toUpperCase();
+  await fbRootSet(`teams/${id}/meta`,{name:name.trim()||"無名チーム",createdAt:Date.now()});
+  return id;
+}
+async function migrateRootDataToTeam(teamId){
+  // One-time: if there's data at FB_ROOT (not under /teams/), copy to /teams/{teamId}/
+  const[ros,evs,resps,lotts]=await Promise.all([
+    fbRootGet("roster"),fbRootGet("events"),fbRootGet("responses"),fbRootGet("lotteries")
+  ]);
+  if(!ros&&!evs)return false;
+  await fbRootSet(`teams/${teamId}/meta`,{name:"既存チーム",createdAt:Date.now(),migrated:true});
+  if(ros)await fbRootSet(`teams/${teamId}/roster`,ros);
+  if(evs)await fbRootSet(`teams/${teamId}/events`,evs);
+  if(resps)await fbRootSet(`teams/${teamId}/responses`,resps);
+  if(lotts)await fbRootSet(`teams/${teamId}/lotteries`,lotts);
+  return true;
+}
 function uid(){return Math.random().toString(36).slice(2,9)}
 
 // ── Default ──
@@ -307,8 +336,119 @@ function Accordion({title,open,onToggle,accent,badge,children}){
   </div>);
 }
 
+// ── LANDING ──
+function LandingScreen({onCreate,onJoin,onPrivacy,onTerms}){
+  const[mode,setMode]=useState("");
+  const[teamName,setTeamName]=useState("");
+  const[joinCode,setJoinCode]=useState("");
+  const[err,setErr]=useState("");
+  const[busy,setBusy]=useState(false);
+  async function doCreate(){
+    if(!teamName.trim()){setErr("チーム名を入力してください");return}
+    setErr("");setBusy(true);
+    try{const id=await onCreate(teamName);}catch(e){setErr(e.message||"作成に失敗しました")}
+    setBusy(false);
+  }
+  async function doJoin(){
+    setErr("");setBusy(true);
+    try{await onJoin(joinCode)}catch(e){setErr(e.message||"参加に失敗しました")}
+    setBusy(false);
+  }
+  return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 16px"}}>
+    <div style={{textAlign:"center",marginBottom:32}}>
+      <div style={{fontSize:64,marginBottom:12,animation:"spFloat 3s ease-in-out infinite"}}>⚽</div>
+      <h1 style={{fontSize:28,fontWeight:900,margin:0}}>駐車場 抽選</h1>
+      <p style={{color:C.limeLight,fontWeight:700,marginTop:6,fontSize:13}}>Soccer Parking Lottery</p>
+      <p style={{color:C.muted,marginTop:16,fontSize:13,lineHeight:1.6,maxWidth:340}}>ジュニアスポーツチームの<br/>駐車場・配車調整アプリ</p>
+    </div>
+    {!mode&&<div style={{width:"100%",maxWidth:340}}>
+      <Btn onClick={()=>setMode("create")} style={{marginBottom:12}}>＋ 新規チームを作成</Btn>
+      <Btn variant="ghost" onClick={()=>setMode("join")}>🔑 チームコードで参加</Btn>
+    </div>}
+    {mode==="create"&&<div style={{width:"100%",maxWidth:340}}>
+      <div style={S.card}>
+        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>チーム名</div>
+        <input value={teamName} onChange={e=>setTeamName(e.target.value)} placeholder="例：港北FC U-12" style={S.input} autoComplete="off" autoFocus/>
+      </div>
+      <ErrMsg msg={err}/>
+      <Btn onClick={doCreate} disabled={busy} style={{marginBottom:8}}>{busy?"作成中...":"作成する →"}</Btn>
+      <Btn variant="ghost" onClick={()=>{setMode("");setErr("")}}>← 戻る</Btn>
+    </div>}
+    {mode==="join"&&<div style={{width:"100%",maxWidth:340}}>
+      <div style={S.card}>
+        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>チームコード</div>
+        <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} placeholder="例：A3X9PQ" style={{...S.input,letterSpacing:2,textAlign:"center",fontSize:16,fontWeight:700}} autoComplete="off" autoFocus/>
+        <p style={{fontSize:11,color:C.dim,marginTop:8,lineHeight:1.5}}>チーム管理者から共有されたコードを入力してください</p>
+      </div>
+      <ErrMsg msg={err}/>
+      <Btn onClick={doJoin} disabled={busy||!joinCode.trim()} style={{marginBottom:8}}>{busy?"参加中...":"参加する →"}</Btn>
+      <Btn variant="ghost" onClick={()=>{setMode("");setErr("");setJoinCode("")}}>← 戻る</Btn>
+    </div>}
+    <div style={{marginTop:32,fontSize:11,color:C.dim,display:"flex",gap:16}}>
+      <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:11,fontFamily:"inherit",textDecoration:"underline"}}>プライバシーポリシー</button>
+      <button onClick={onTerms} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:11,fontFamily:"inherit",textDecoration:"underline"}}>利用規約</button>
+    </div>
+  </div>);
+}
+
+// ── PRIVACY / TERMS ──
+function LegalScreen({type,onBack}){
+  const isPrivacy=type==="privacy";
+  return(<div style={{padding:"24px 16px",maxWidth:560,margin:"0 auto"}}>
+    <BackBar title={isPrivacy?"プライバシーポリシー":"利用規約"} onBack={onBack} label="← 戻る"/>
+    <div style={{...S.card,lineHeight:1.8,fontSize:13,whiteSpace:"pre-wrap"}}>
+      {isPrivacy?
+`本アプリ「⚽ 駐車場抽選」は、ジュニアスポーツチームの保護者間で駐車場や乗合を調整するためのツールです。
+
+【収集する情報】
+・選手の名前、背番号、学年
+・試合への出欠回答
+・駐車場の希望、乗合可能人数
+・集合場所（任意）
+・添付ファイルのURL（任意）
+
+【データの保管】
+・データは Google Firebase Realtime Database に保管されます
+・データはチームコードごとに完全に分離されています
+・チームコードを知らない第三者はアクセスできません
+
+【共有】
+・第三者にデータを販売・共有することはありません
+・チームコードを共有された保護者間でのみ閲覧・編集が可能です
+
+【削除】
+・不要になったデータは管理者が削除できます
+・お問い合わせは管理者経由で本アプリ提供者へご連絡ください
+
+最終更新: 2026年5月`
+:
+`【サービス内容】
+本アプリは、ジュニアスポーツチームの駐車場・配車調整を支援する無料サービスです。
+
+【利用条件】
+・本アプリはチーム単位で利用されます
+・チームコードを知る保護者間で共同利用してください
+
+【免責事項】
+・データの正確性、可用性について保証しません
+・抽選結果や配車マッチング結果の運用責任はチーム管理者にあります
+・本アプリの利用により生じたいかなる損害についても提供者は責任を負いません
+
+【禁止事項】
+・他チームのデータへの不正アクセス試行
+・データ改ざん、削除を目的とした不正利用
+・本アプリの仕組みを悪用した行為
+
+【サービスの変更・終了】
+・予告なく仕様変更・サービス終了する場合があります
+
+最終更新: 2026年5月`}
+    </div>
+  </div>);
+}
+
 // ── HOME ──
-function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent,loading}){
+function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent,loading,teamMeta}){
   const[,tick]=useState(0);
   useEffect(()=>{const t=setInterval(()=>tick(x=>x+1),30000);return()=>clearInterval(t)},[]);
   const now=new Date();
@@ -364,7 +504,7 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
     <div style={{textAlign:"center",padding:"28px 0 20px"}}>
       <div style={{fontSize:52,marginBottom:10,display:"inline-block",animation:"spFloat 3s ease-in-out infinite"}}>⚽</div>
       <h1 style={{fontSize:26,fontWeight:900,margin:0}}>駐車場 抽選</h1>
-      <p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:13}}>Soccer Parking Lottery</p>
+      {teamMeta?.name?<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:14}}>🏆 {teamMeta.name}</p>:<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:13}}>Soccer Parking Lottery</p>}
     </div>
     {loading?<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>読み込み中...</div>
     :!featured&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
@@ -728,7 +868,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
   </div>);
 }
 // ── ADMIN SCREEN ──
-function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSaveEvent,onDeleteEvent,onSaveRoster,onRunLottery,onReLottery,onResetResponses,onBack,onNav}){
+function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSaveEvent,onDeleteEvent,onSaveRoster,onRunLottery,onReLottery,onResetResponses,onBack,onNav,teamId,teamMeta,onUpdateTeamName,onLeaveTeam}){
   const[tab,setTab]=useState("events");
   const[msg,setMsg]=useState("");
   const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),3000)};
@@ -795,7 +935,27 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
     if((tab==="events"&&editEv&&evDirty)||(tab==="roster"&&rosterDirty)){const ok=await confirm("保存せずに戻りますか？");if(!ok)return}
     onBack()}
 
-  const TABS=[["events","📅 試合"],["roster","👦 名簿"],["check","📋 回答"]];
+  const TABS=[["events","📅 試合"],["roster","👦 名簿"],["check","📋 回答"],["team","⚙️ 設定"]];
+  const[teamNameDraft,setTeamNameDraft]=useState("");
+  const[teamFlash,setTeamFlash]=useState("");
+  const[copyFlash,setCopyFlash]=useState(false);
+  useEffect(()=>{if(tab==="team"&&teamMeta)setTeamNameDraft(teamMeta.name||"")},[tab,teamMeta?.name]);
+  const shareUrl=teamId?`${window.location.origin}${window.location.pathname.replace(/\/index[^/]*\.html$/,"/")}?team=${teamId}`:"";
+  async function copyShareUrl(){
+    try{await navigator.clipboard.writeText(shareUrl);setCopyFlash(true);setTimeout(()=>setCopyFlash(false),3000)}
+    catch(e){
+      const el=document.createElement("textarea");el.value=shareUrl;document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);
+      setCopyFlash(true);setTimeout(()=>setCopyFlash(false),3000);
+    }
+  }
+  async function saveTeamName(){
+    await onUpdateTeamName(teamNameDraft);
+    setTeamFlash("✅ チーム名を更新しました");setTimeout(()=>setTeamFlash(""),3000);
+  }
+  async function leaveTeam(){
+    if(!await confirm("このチームから抜けますか？\n（データは削除されません。再度コードで参加可能）"))return;
+    onLeaveTeam();
+  }
   const evRoster=editEv?roster.filter(r=>(evGrades||allGrades).includes(r.grade||"4年")):[];
 
   if(editEv)return(<div>
@@ -1022,6 +1182,44 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
         </div>)})}
     </div>}
 
+    {tab==="team"&&<div>
+      <div style={S.card}>
+        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>チームコード</div>
+        <div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:C.limeLight,textAlign:"center",padding:"8px 0"}}>{teamId||"-"}</div>
+        <div style={{fontSize:11,color:C.dim,textAlign:"center"}}>このコードを保護者と共有してください</div>
+      </div>
+      {teamId&&<div style={S.card}>
+        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>チーム名</div>
+        <input value={teamNameDraft} onChange={e=>setTeamNameDraft(e.target.value)} placeholder="例：港北FC U-12" style={S.input}/>
+        <FlashMsg msg={teamFlash}/>
+        <Btn onClick={saveTeamName} style={{marginTop:8}} disabled={!teamNameDraft.trim()||teamNameDraft===teamMeta?.name}>💾 チーム名を更新</Btn>
+      </div>}
+      {teamId&&<div style={S.card}>
+        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>共有URL</div>
+        <div style={{background:"rgba(0,0,0,0.25)",borderRadius:10,padding:"10px 12px",fontSize:11,color:C.muted,wordBreak:"break-all",marginBottom:8}}>{shareUrl}</div>
+        <Btn onClick={copyShareUrl}>{copyFlash?"✅ コピーしました":"📋 URLをコピー"}</Btn>
+        <button onClick={()=>{
+          const txt=`⚽ 駐車場抽選アプリ\n━━━━━━━━━━━━\n📌 ${teamMeta?.name||"チーム"} 専用URL\n🔑 チームコード: ${teamId}\n━━━━━━━━━━━━\n👇 こちらから参加してください\n${shareUrl}`;
+          if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
+          else{navigator.clipboard.writeText(txt).then(()=>alert("LINE文をコピーしました")).catch(()=>{
+            const el=document.createElement("textarea");el.value=txt;document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました");
+          })}
+        }} style={{...S.btnSm,width:"100%",marginTop:8}}>📢 LINE用招待文を生成</button>
+      </div>}
+      {teamId&&<div style={S.card}>
+        <div style={{fontSize:12,color:C.dim,marginBottom:8}}>チーム切替</div>
+        <p style={{fontSize:11,color:C.dim,marginBottom:8,lineHeight:1.5}}>このチームから抜けて、別のチームに参加できます（データは削除されません）</p>
+        <Btn variant="ghost" onClick={leaveTeam}>← チームから抜ける</Btn>
+      </div>}
+      <div style={S.card}>
+        <div style={{fontSize:12,color:C.dim,marginBottom:8}}>規約・ポリシー</div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>onNav("privacy")} style={{...S.btnSm,flex:1}}>プライバシー</button>
+          <button onClick={()=>onNav("terms")} style={{...S.btnSm,flex:1}}>利用規約</button>
+        </div>
+      </div>
+    </div>}
+
     {modal&&<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
       <div style={{background:"#0a2a0a",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:24,width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.5)"}}>
         <p style={{color:"#fff",marginBottom:24,fontSize:15,fontWeight:700,whiteSpace:"pre-wrap",lineHeight:1.6}}>{modal.m}</p>
@@ -1201,8 +1399,42 @@ function App(){
   const[dataLoading,setDataLoading]=useState(true);
   const[syncing,setSyncing]=useState(false);
   const[errorMsg,setErrorMsg]=useState("");
+  const[teamId,setTeamIdState]=useState(TEAM_ID);
+  const[teamMeta,setTeamMeta]=useState(null);
   const editingRef=useRef(false);
   const screenRef=useRef("loading");
+
+  async function handleCreateTeam(name){
+    const newId=await createTeam(name);
+    setTeamId(newId);setTeamIdState(newId);setTeamMeta({name:name.trim()||"無名チーム",createdAt:Date.now()});
+    setRoster([]);setEvents([]);setAllResponses({});setAllLotteries({});
+    setDataLoading(true);
+    navigate("loading");
+    setTimeout(()=>loadAll(),100);
+    return newId;
+  }
+  async function handleJoinTeam(id){
+    const cleanId=id.trim().toUpperCase();
+    if(!cleanId)throw new Error("チームコードを入力してください");
+    const meta=await checkTeamExists(cleanId);
+    if(!meta)throw new Error("そのチームコードは存在しません");
+    setTeamId(cleanId);setTeamIdState(cleanId);setTeamMeta(meta);
+    setRoster([]);setEvents([]);setAllResponses({});setAllLotteries({});
+    setDataLoading(true);
+    navigate("loading");
+    setTimeout(()=>loadAll(),100);
+  }
+  function handleLeaveTeam(){
+    setTeamId(null);setTeamIdState(null);setTeamMeta(null);
+    setRoster([]);setEvents([]);setAllResponses({});setAllLotteries({});
+    navigate("landing");
+  }
+  async function handleUpdateTeamName(name){
+    if(!teamId)return;
+    const updated={...(teamMeta||{}),name:name.trim()||"無名チーム"};
+    await fbSet("meta",updated);
+    setTeamMeta(updated);
+  }
 
   function navigate(s){screenRef.current=s;setScreen(s);try{history.pushState({screen:s},"",`#${s}`)}catch(e){}}
 
@@ -1214,7 +1446,28 @@ function App(){
 
   async function loadAll(){
     if(editingRef.current)return;
+    // No team selected: try auto-migration of legacy root data, else show landing
+    if(!TEAM_ID){
+      const legacyExists=await checkTeamExists("LEGACY");
+      if(legacyExists){
+        // Legacy team already migrated by someone else - just attach
+        setTeamId("LEGACY");setTeamIdState("LEGACY");setTeamMeta(legacyExists);
+      }else{
+        const legacyRoster=await fbRootGet("roster");
+        if(legacyRoster!==undefined&&legacyRoster!==null){
+          await migrateRootDataToTeam("LEGACY");
+          setTeamId("LEGACY");setTeamIdState("LEGACY");
+        }else{
+          setDataLoading(false);
+          if(screenRef.current==="loading")navigate("landing");
+          return;
+        }
+      }
+    }
     setSyncing(true);
+    // Load team meta
+    const meta=await fbGet("meta");
+    if(meta)setTeamMeta(meta);
     const ro=await fbGet("roster");const evList=await fbGet("events");
     if(ro===undefined||evList===undefined){setSyncing(false);setDataLoading(false);setErrorMsg("データベースへのアクセスに失敗しました。");if(screenRef.current==="loading")navigate("error");return}
     const r=Array.isArray(ro)?ro:(ro?Object.values(ro):[]);
@@ -1229,9 +1482,11 @@ function App(){
       ]);
       setAllResponses(Object.fromEntries(resps));
       setAllLotteries(Object.fromEntries(lotts.filter(([_,v])=>v)));
+    }else{
+      setAllResponses({});setAllLotteries({});
     }
     setSyncing(false);setDataLoading(false);
-    if(screenRef.current==="loading"||screenRef.current==="error")navigate("home");
+    if(screenRef.current==="loading"||screenRef.current==="error"||screenRef.current==="landing")navigate("home");
   }
 
   useEffect(()=>{loadAll();const t=setInterval(loadAll,30000);return()=>clearInterval(t)},[]);
@@ -1322,6 +1577,15 @@ function App(){
   const selResp=(selectedEventId&&allResponses[selectedEventId])||{};
   const selLott=(selectedEventId&&allLotteries[selectedEventId])||null;
 
+  if(screen==="landing")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff"}}>
+    <LandingScreen onCreate={handleCreateTeam} onJoin={handleJoinTeam}
+      onPrivacy={()=>navigate("privacy")} onTerms={()=>navigate("terms")}/>
+  </div>);
+
+  if(screen==="privacy"||screen==="terms")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff",padding:"24px 16px 80px"}}>
+    <LegalScreen type={screen} onBack={()=>navigate(teamId?"home":"landing")}/>
+  </div>);
+
   if(screen==="loading")return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
     <div style={{textAlign:"center"}}><div style={{fontSize:48,color:C.limeLight,animation:"spFloat 1s ease-in-out infinite"}}>⚽</div><p style={{color:C.muted,marginTop:12,fontSize:14}}>読み込み中...</p></div>
   </div>);
@@ -1339,14 +1603,15 @@ function App(){
   return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff",padding:"0 16px 80px",position:"relative"}}>
     {syncing&&<div style={{position:"fixed",top:12,right:12,background:"rgba(0,0,0,0.5)",color:C.limeLight,padding:"4px 8px",borderRadius:8,fontSize:11,fontWeight:700,zIndex:100,backdropFilter:"blur(4px)"}}>↻ 同期中</div>}
     <div style={{maxWidth:460,margin:"0 auto",paddingTop:24}}>
-      {screen==="home"&&<HomeScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries} onNav={navigate} onSelectEvent={setSelectedEventId} loading={dataLoading}/>}
+      {screen==="home"&&<HomeScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries} onNav={navigate} onSelectEvent={setSelectedEventId} loading={dataLoading} teamMeta={teamMeta}/>}
       {screen==="event"&&<EventScreen event={selEv} roster={roster} responses={selResp} lottery={selLott}
         onBack={()=>navigate("home")} onSubmit={handleSubmit} onNav={navigate} onCarpoolAmida={handleCarpoolAmida} onSaveCarpool={handleSaveCarpool}
       />}
       {screen==="admin"&&<AdminScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries}
         onSelectEvent={setSelectedEventId} onSaveEvent={handleSaveEvent} onDeleteEvent={handleDeleteEvent}
         onSaveRoster={handleSaveRoster} onRunLottery={handleRunLottery} onReLottery={handleReLottery} onResetResponses={handleResetResponses}
-        onBack={()=>navigate("home")} onNav={navigate}/>
+        onBack={()=>navigate("home")} onNav={navigate}
+        teamId={teamId} teamMeta={teamMeta} onUpdateTeamName={handleUpdateTeamName} onLeaveTeam={handleLeaveTeam}/>
       }
       {screen==="lottery"&&<LotteryScreen event={selEv} participants={lottParticipants} limit={lottLimit} isRerun={lottIsRerun} mode={lottMode} carpoolPoint={lottCarpoolPoint} onComplete={handleCompleteLottery} onBack={()=>navigate(lottMode==="carpool"?"event":"admin")}/>}
       {screen==="results"&&<ResultsScreen event={selEv} roster={roster} responses={selResp} lottery={selLott}
