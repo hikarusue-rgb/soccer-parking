@@ -38,6 +38,7 @@ const{useState,useEffect,useRef,useCallback}=React;
 
 // ── Firebase ──
 const FB_ROOT="https://soccer-parking-default-rtdb.asia-southeast1.firebasedatabase.app/pro";
+const GLOBAL_ADMIN_PASS="spadmin2026"; // 全体管理者パスワード（コードで変更可能）
 let TEAM_ID=null;
 (function initTeamId(){
   const u=new URLSearchParams(window.location.search).get("team");
@@ -112,6 +113,66 @@ function getTimeLeft(dl){const d=new Date(dl)-new Date();if(d<=0)return null;con
 function getEventRoster(roster,ev){const g=ev.inviteGrades||[...new Set(roster.map(r=>r.grade||"4年"))];return roster.filter(r=>g.includes(r.grade||"4年"))}
 function getConfirmed(ev){return ev.confirmedParking||[]}
 function getLotterySlots(ev){return Math.max(0,(ev.parkingLimit||0)-getConfirmed(ev).length)}
+function getEventMode(ev){return ev?.mode||(ev?.carpoolEnabled?"carpool":"simple")}
+function getTeamSettings(meta){
+  const s=meta?.settings||{};
+  return{gasPrice:s.gasPrice??170,fuelEconomy:s.fuelEconomy??10,handlingFee:s.handlingFee??0,...s};
+}
+function computeDriverCost(ev,settings,numPassengers){
+  if(!ev||!ev.roundTripKm)return null;
+  const km=parseFloat(ev.roundTripKm)||0;
+  const toll=parseInt(ev.tollFee)||0;
+  const fe=parseFloat(settings.fuelEconomy)||10;
+  const gp=parseFloat(settings.gasPrice)||170;
+  const hf=parseInt(settings.handlingFee)||0;
+  const gas=Math.round(km/fe*gp);
+  const total=gas+toll+hf;
+  const perPassenger=numPassengers>0?Math.ceil(total/numPassengers/100)*100:null;
+  return{gas,toll,handlingFee:hf,total,perPassenger,numPassengers};
+}
+function computeCarpoolPlan(ev,resp){
+  const attendees=Object.entries(resp||{}).filter(([id,r])=>r&&r.attending);
+  const attendeeIds=attendees.map(([id])=>id);
+  const N=attendeeIds.length;
+  if(N===0)return null;
+  const confirmedSet=new Set(getConfirmed(ev||{}));
+  // Drivers = attendees with parkingNeeded=true (intent to bring car)
+  // Their "total people they can carry" = 1 (self) + carpoolCapacity
+  const drivers=attendees
+    .filter(([id,r])=>r.parkingNeeded)
+    .map(([id,r])=>({id,cap:r.carpoolCapacity||0,total:1+(r.carpoolCapacity||0),isConfirmed:confirmedSet.has(id)}))
+    .sort((a,b)=>{
+      // Confirmed first, then by capacity desc
+      if(a.isConfirmed!==b.isConfirmed)return a.isConfirmed?-1:1;
+      return b.total-a.total;
+    });
+  const parkingLimit=ev?.parkingLimit||0;
+  const selected=[];
+  let coveredCount=0;
+  for(const d of drivers){
+    if(selected.length>=parkingLimit)break;
+    if(coveredCount>=N&&!d.isConfirmed)break;
+    selected.push(d);
+    coveredCount+=d.total;
+  }
+  const driverIdSet=new Set(selected.map(d=>d.id));
+  const passengersToAssign=attendeeIds.filter(id=>!driverIdSet.has(id));
+  const assignments={};
+  selected.forEach(d=>{assignments[d.id]=[]});
+  const unassigned=[];
+  for(const pid of passengersToAssign){
+    let placed=false;
+    for(const d of selected){
+      if(assignments[d.id].length<d.cap){
+        assignments[d.id].push(pid);
+        placed=true;
+        break;
+      }
+    }
+    if(!placed)unassigned.push(pid);
+  }
+  return{selectedDrivers:selected.map(d=>({id:d.id,capacity:d.cap})),assignments,unassigned,coveredCount,attendeeCount:N};
+}
 function getDropouts(ev,resp,lott){
   if(!lott?.conducted)return null;
   const winners=lott.winners||[];
@@ -127,7 +188,7 @@ function getDropouts(ev,resp,lott){
   return{dropouts,effectiveWinners,openSlots,eligibleLosers};
 }
 function computeCarpoolMatching(ev,resp,lott){
-  if(!ev?.carpoolEnabled||!lott?.conducted)return null;
+  if(getEventMode(ev)!=="carpool"||!lott?.conducted)return null;
   const confirmed=getConfirmed(ev);
   const winners=lott.winners||[];
   const drivers=[...confirmed,...winners].map(id=>{
@@ -337,7 +398,7 @@ function Accordion({title,open,onToggle,accent,badge,children}){
 }
 
 // ── LANDING ──
-function LandingScreen({onCreate,onJoin,onPrivacy,onTerms}){
+function LandingScreen({onCreate,onJoin,onPrivacy,onTerms,onGlobalAdmin,maintenanceNotice}){
   const[mode,setMode]=useState("");
   const[teamName,setTeamName]=useState("");
   const[joinCode,setJoinCode]=useState("");
@@ -384,10 +445,117 @@ function LandingScreen({onCreate,onJoin,onPrivacy,onTerms}){
       <Btn onClick={doJoin} disabled={busy||!joinCode.trim()} style={{marginBottom:8}}>{busy?"参加中...":"参加する →"}</Btn>
       <Btn variant="ghost" onClick={()=>{setMode("");setErr("");setJoinCode("")}}>← 戻る</Btn>
     </div>}
-    <div style={{marginTop:32,fontSize:11,color:C.dim,display:"flex",gap:16}}>
+    {maintenanceNotice&&<MaintenanceBanner notice={maintenanceNotice} style={{marginTop:16,maxWidth:340,width:"100%"}}/>}
+    <div style={{marginTop:32,fontSize:11,color:C.dim,display:"flex",gap:16,flexWrap:"wrap",justifyContent:"center"}}>
       <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:11,fontFamily:"inherit",textDecoration:"underline"}}>プライバシーポリシー</button>
       <button onClick={onTerms} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:11,fontFamily:"inherit",textDecoration:"underline"}}>利用規約</button>
+      <button onClick={onGlobalAdmin} style={{background:"none",border:"none",color:C.faint,cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>🔧</button>
     </div>
+  </div>);
+}
+function MaintenanceBanner({notice,style}){
+  if(!notice||!notice.message)return null;
+  const colors={info:{bg:"rgba(56,189,248,0.12)",border:"#38bdf8",text:"#38bdf8"},warning:{bg:"rgba(245,158,11,0.12)",border:"#f59e0b",text:"#f59e0b"},critical:{bg:"rgba(239,68,68,0.12)",border:"#ef4444",text:"#f87171"}};
+  const c=colors[notice.level||"info"]||colors.info;
+  return(<div style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:12,padding:"10px 14px",fontSize:12,color:c.text,whiteSpace:"pre-wrap",lineHeight:1.5,...style}}>
+    📢 {notice.message}
+  </div>);
+}
+
+// ── GLOBAL ADMIN ──
+function GlobalAdminLogin({onLogin,onBack}){
+  const[pwd,setPwd]=useState("");
+  const[err,setErr]=useState("");
+  function tryLogin(){
+    if(pwd===GLOBAL_ADMIN_PASS){sessionStorage.setItem("global_admin","1");setErr("");onLogin()}
+    else{setErr("⚠️ パスワードが違います")}
+  }
+  return(<div style={{padding:"24px 16px",maxWidth:420,margin:"60px auto 0"}}>
+    <div style={{textAlign:"center",marginBottom:24}}>
+      <div style={{fontSize:48,marginBottom:8}}>🔐</div>
+      <h2 style={{fontSize:20,fontWeight:900,margin:0}}>全体管理者ログイン</h2>
+    </div>
+    <div style={S.card}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:6}}>パスワード</div>
+      <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryLogin()} placeholder="••••••••" style={{...S.input,letterSpacing:2}} autoFocus/>
+    </div>
+    <ErrMsg msg={err}/>
+    <Btn onClick={tryLogin} style={{marginBottom:8}}>🔓 ログイン</Btn>
+    <Btn variant="ghost" onClick={onBack}>← 戻る</Btn>
+  </div>);
+}
+function GlobalAdminDashboard({onBack,onLogout}){
+  const[teams,setTeams]=useState(null);
+  const[notice,setNotice]=useState(null);
+  const[noticeDraft,setNoticeDraft]=useState({message:"",level:"info"});
+  const[flash,setFlash]=useState("");
+  const[newName,setNewName]=useState("");
+  useEffect(()=>{
+    fbRootGet("teams").then(t=>setTeams(t||{}));
+    fbRootGet("maintenance").then(n=>{setNotice(n);if(n)setNoticeDraft({message:n.message||"",level:n.level||"info"})});
+  },[]);
+  async function deleteTeam(id){
+    if(!confirm(`チーム ${id} を完全削除しますか？\nこの操作は取り消せません。`))return;
+    await fbRootSet(`teams/${id}`,null);
+    setTeams(t=>{const n={...t};delete n[id];return n});
+    setFlash(`✅ チーム ${id} を削除しました`);setTimeout(()=>setFlash(""),3000);
+  }
+  async function postNotice(){
+    const n={message:noticeDraft.message.trim(),level:noticeDraft.level,postedAt:Date.now()};
+    if(!n.message){await fbRootSet("maintenance",null);setNotice(null);setFlash("✅ 告知を削除しました")}
+    else{await fbRootSet("maintenance",n);setNotice(n);setFlash("✅ 告知を公開しました")}
+    setTimeout(()=>setFlash(""),3000);
+  }
+  async function createNew(){
+    if(!newName.trim()){setFlash("⚠️ チーム名を入力してください");setTimeout(()=>setFlash(""),3000);return}
+    const id=await createTeam(newName);
+    setTeams(t=>({...t,[id]:{name:newName.trim(),createdAt:Date.now()}}));
+    setNewName("");
+    setFlash(`✅ チーム作成: ${id}`);setTimeout(()=>setFlash(""),5000);
+  }
+  function logout(){sessionStorage.removeItem("global_admin");onLogout()}
+  const teamList=teams?Object.entries(teams):[];
+  return(<div style={{padding:"24px 16px",maxWidth:520,margin:"0 auto"}}>
+    <BackBar title="🔐 全体管理者" onBack={onBack} label="← 戻る"/>
+    <FlashMsg msg={flash}/>
+    <div style={S.card}>
+      <div style={{fontSize:13,fontWeight:900,marginBottom:10}}>📢 メンテナンス告知</div>
+      <p style={{fontSize:11,color:C.dim,marginBottom:8}}>全ユーザーのトップ画面に表示されます。空欄保存で告知を削除</p>
+      <textarea value={noticeDraft.message} onChange={e=>setNoticeDraft(d=>({...d,message:e.target.value}))} placeholder="例：12/25 02:00〜04:00 メンテナンス予定" rows={3} style={{...S.input,resize:"vertical",minHeight:70,marginBottom:8,fontFamily:"inherit"}}/>
+      <select value={noticeDraft.level} onChange={e=>setNoticeDraft(d=>({...d,level:e.target.value}))} style={{...S.select,marginBottom:8}}>
+        <option value="info">情報（青）</option>
+        <option value="warning">警告（黄）</option>
+        <option value="critical">重要（赤）</option>
+      </select>
+      <Btn onClick={postNotice}>{noticeDraft.message.trim()?"📢 告知を公開":"🗑 告知を削除"}</Btn>
+      {notice&&<div style={{fontSize:11,color:C.dim,marginTop:8}}>現在の告知: {new Date(notice.postedAt).toLocaleString("ja-JP")}</div>}
+    </div>
+
+    <div style={S.card}>
+      <div style={{fontSize:13,fontWeight:900,marginBottom:10}}>➕ 新規チーム作成</div>
+      <div style={{display:"flex",gap:8}}>
+        <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="チーム名" style={{...S.input,flex:1}}/>
+        <button onClick={createNew} style={{...S.btnSm,background:C.lime,color:"#052e16",padding:"10px 16px"}}>作成</button>
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <div style={{fontSize:13,fontWeight:900,marginBottom:10}}>📋 全チーム一覧（{teamList.length}件）</div>
+      {teams===null?<p style={{color:C.dim,fontSize:13}}>読み込み中...</p>
+        :teamList.length===0?<p style={{color:C.dim,fontSize:13}}>チームがありません</p>
+        :teamList.sort((a,b)=>(b[1]?.createdAt||0)-(a[1]?.createdAt||0)).map(([id,meta])=><div key={id} style={{background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"10px 12px",marginBottom:6}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700}}>{meta?.name||"無名チーム"}</div>
+              <div style={{fontSize:11,color:C.dim,marginTop:2}}>コード: <span style={{color:C.limeLight,fontWeight:700}}>{id}</span></div>
+              {meta?.createdAt&&<div style={{fontSize:10,color:C.faint,marginTop:2}}>作成: {new Date(meta.createdAt).toLocaleDateString("ja-JP")}</div>}
+            </div>
+            <button onClick={()=>deleteTeam(id)} style={{background:"rgba(239,68,68,0.2)",border:"none",color:"#f87171",borderRadius:8,padding:"6px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>削除</button>
+          </div>
+        </div>)}
+    </div>
+
+    <Btn variant="ghost" onClick={logout}>🔒 ログアウト</Btn>
   </div>);
 }
 
@@ -448,7 +616,7 @@ function LegalScreen({type,onBack}){
 }
 
 // ── HOME ──
-function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent,loading,teamMeta}){
+function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent,loading,teamMeta,maintenanceNotice}){
   const[,tick]=useState(0);
   useEffect(()=>{const t=setInterval(()=>tick(x=>x+1),30000);return()=>clearInterval(t)},[]);
   const now=new Date();
@@ -506,6 +674,7 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
       <h1 style={{fontSize:26,fontWeight:900,margin:0}}>駐車場 抽選</h1>
       {teamMeta?.name?<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:14}}>🏆 {teamMeta.name}</p>:<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:13}}>Sports Parking Lottery</p>}
     </div>
+    {maintenanceNotice&&<MaintenanceBanner notice={maintenanceNotice} style={{marginBottom:16}}/>}
     {loading?<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>読み込み中...</div>
     :!featured&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
       <div style={{fontSize:40,marginBottom:12}}>📅</div>
@@ -539,7 +708,7 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
   </div>);
 }
 // ── EVENT SCREEN ──
-function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCarpoolAmida,onSaveCarpool}){
+function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCarpoolAmida,onSaveCarpool,onOptimizeCarpool,teamMeta}){
   const er=getEventRoster(roster,event||{});
   const myKey="parkingApp_myId";
   const[memberId,setMemberId]=useState(()=>localStorage.getItem(myKey)||"");
@@ -760,7 +929,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
               <option value={0}>乗合不可（自分の分のみ）</option>
               {[1,2,3,4,5].map(n=><option key={n} value={n}>乗合可：{n}人まで</option>)}
             </select>
-            {event.carpoolEnabled&&carpool>0&&<p style={{fontSize:11,color:C.dim,marginTop:8,lineHeight:1.5}}>※ 集合場所は駐車場抽選後に登録できます</p>}
+            {getEventMode(event)==="carpool"&&carpool>0&&<p style={{fontSize:11,color:C.dim,marginTop:8,lineHeight:1.5}}>※ 集合場所は駐車場抽選後に登録できます</p>}
           </div>}
           {!isConfirmed&&<p style={{fontSize:12,color:C.dim,textAlign:"center",marginTop:8}}>抽選枠 {lottSlots}台・超過時はあみだくじ</p>}
         </div>}
@@ -779,96 +948,110 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
     </div>}
     </Accordion>
 
-    {event.carpoolEnabled&&lottery?.conducted&&<Accordion title="🚙 配車" open={sectionOpen.carpool} onToggle={()=>toggleSection("carpool")} accent="rgba(132,204,22,0.4)">
+    {getEventMode(event)==="carpool"&&<Accordion title="🚙 配車（機能2）" open={sectionOpen.carpool} onToggle={()=>toggleSection("carpool")} accent="rgba(132,204,22,0.4)">
     {(()=>{
-      const winnersList=lottery.winners||[];
-      const isMyWinner=memberId&&(winnersList.includes(memberId)||confirmed.includes(memberId));
-      const myAttending=memberId&&responses[memberId]?.attending;
-      const myCap=memberId?(responses[memberId]?.carpoolCapacity||0):0;
-      const myParking=memberId&&responses[memberId]?.parkingNeeded;
-      const isMyDriver=isMyWinner&&myAttending&&myCap>0;
-      const isMyLoser=memberId&&!isMyWinner&&myAttending&&myParking;
-      const publicPoints=Object.entries(responses).filter(([id,r])=>r.attending&&r.meetingPoint&&(winnersList.includes(id)||confirmed.includes(id))&&r.carpoolCapacity>0).map(([id,r])=>r.meetingPoint.trim()).filter((v,i,a)=>a.indexOf(v)===i);
-      const m=computeCarpoolMatching(event,responses,lottery);
-      const hasMatching=m&&(m.points.length>0||m.unmatched.length>0);
-      const myMpSaved=!!responses[memberId]?.meetingPoint;
-      const myWishesSaved=(responses[memberId]?.carpoolWishes||[]).length>0;
-      return <>
-        {isMyDriver&&<div style={{...S.card,borderColor:"rgba(245,158,11,0.4)",background:"rgba(245,158,11,0.05)"}}>
-          <div style={{fontWeight:900,color:C.amber,marginBottom:8}}>🚗 集合場所を登録（あなたはドライバー）</div>
-          <p style={{fontSize:11,color:C.dim,marginBottom:10}}>登録した集合場所は乗合希望者の公募リストに表示されます</p>
-          <input value={driverMpInput} onChange={e=>setDriverMpInput(e.target.value)} placeholder="例：○○駅 西口 7:30" style={{...S.input,marginBottom:8}} autoComplete="off"/>
-          <Btn variant="yellow" onClick={saveDriverMeetingPoint} disabled={savingCarpool}>{savingCarpool?"保存中...":myMpSaved?"💾 集合場所を更新":"💾 集合場所を登録"}</Btn>
-          {myMpSaved&&<p style={{color:C.limeLight,fontSize:11,marginTop:6,textAlign:"center"}}>✅ 現在の登録: {responses[memberId].meetingPoint}</p>}
-        </div>}
-
-        {isMyLoser&&<div style={{...S.card,borderColor:"rgba(56,189,248,0.4)",background:"rgba(56,189,248,0.05)"}}>
-          <div style={{fontWeight:900,color:C.sky,marginBottom:8}}>🚙 乗合希望を選択（最大2箇所）</div>
-          {publicPoints.length===0?<p style={{fontSize:12,color:C.dim}}>ドライバーがまだ集合場所を登録していません。しばらくお待ちください。</p>
-            :<>
-              <p style={{fontSize:11,color:C.dim,marginBottom:10}}>乗合できる集合場所を最大2箇所選択してください</p>
-              {publicPoints.map(mp=>{
-                const dlist=Object.entries(responses).filter(([id,r])=>r.meetingPoint?.trim()===mp&&(winnersList.includes(id)||confirmed.includes(id))&&r.carpoolCapacity>0);
-                const cap=dlist.reduce((s,[id,r])=>s+r.carpoolCapacity,0);
-                const sel=loserWishes.includes(mp);
-                return <button key={mp} onClick={()=>toggleWish(mp)} style={{display:"block",width:"100%",textAlign:"left",background:sel?"rgba(56,189,248,0.2)":"rgba(255,255,255,0.05)",border:sel?"2px solid #38bdf8":"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 12px",marginBottom:6,color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
-                  <div style={{fontSize:13,fontWeight:700}}>{sel?"✅ ":"⬜ "}📍 {mp}</div>
-                  <div style={{fontSize:11,color:C.dim,marginTop:2}}>ドライバー{dlist.length}名・座席計{cap}</div>
-                </button>;
-              })}
-              <Btn variant="yellow" onClick={saveLoserWishes} disabled={savingCarpool||loserWishes.length===0} style={{marginTop:6}}>{savingCarpool?"保存中...":myWishesSaved?"💾 希望を更新":"💾 希望を登録"}</Btn>
-              {myWishesSaved&&<p style={{color:C.limeLight,fontSize:11,marginTop:6,textAlign:"center"}}>✅ 現在の希望: {(responses[memberId].carpoolWishes||[]).join(" / ")}</p>}
-            </>}
-        </div>}
-
-        {hasMatching&&<div style={{...S.card,borderColor:"rgba(132,204,22,0.4)",background:"rgba(132,204,22,0.05)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{fontWeight:900,color:C.limeLight}}>🚙 配車マッチング</div>
-            <button onClick={()=>{
-              const L=[`🚙 配車マッチング結果`,`📌 ${event.title}`,`🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}`];
-              if(event.location){L.push(`📍 ${event.location}`);L.push(`🗺 ${mapUrl(event.location)}`)}
-              L.push("━━━━━━━━━━━━");
-              m.points.forEach(p=>{
-                L.push(`📍 ${p.meetingPoint}`);
-                p.drivers.forEach(d=>{const dm=roster.find(r=>r.id===d.id);if(dm)L.push(`  🚗 #${dm.num} ${dm.name}（${d.capacity}席）`)});
-                const assignedIds=p.assigned||(p.overflow?[]:p.riders.map(r=>r.id));
-                if(assignedIds.length){L.push(`  ✅ 乗車: `+assignedIds.map(id=>{const me=roster.find(r=>r.id===id);return me?`#${me.num} ${me.name}`:""}).filter(Boolean).join(", "))}
-                if(p.overflow&&!p.assigned)L.push(`  ⚠️ 定員オーバー（あみだ未実施）`);
-                L.push("");
-              });
-              if(m.unmatched.length){L.push("⚠️ 未成立");m.unmatched.forEach(id=>{const me=roster.find(r=>r.id===id);if(me)L.push(`  ・#${me.num} ${me.name}`)})}
-              const txt=L.join("\n");
-              if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
-              else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
-                const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！");
-              })}
-            }} style={S.btnSm}>📋 LINE共有</button>
+      const plan=lottery?.carpoolPlan;
+      const attendCount=Object.values(responses).filter(r=>r&&r.attending).length;
+      if(!plan){
+        return <div>
+          <div style={{...S.card,background:"rgba(56,189,248,0.05)",borderColor:"rgba(56,189,248,0.3)"}}>
+            <div style={{fontWeight:900,color:C.sky,marginBottom:8}}>🎯 配車最適化</div>
+            <p style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.6}}>参加者と乗合可能ドライバーから、駐車場枠 <b>{event.parkingLimit||0}台</b> を最も効率よく使う配車を貪欲法で計算します。</p>
+            <p style={{fontSize:11,color:C.dim,marginBottom:12}}>現在の出席者: {attendCount}名</p>
+            <Btn variant="yellow" onClick={()=>onOptimizeCarpool(event.id)} disabled={attendCount===0}>🎯 配車を最適化する</Btn>
           </div>
-          {m.points.map(p=><div key={p.meetingPoint} style={{background:"rgba(0,0,0,0.2)",borderRadius:12,padding:12,marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:8}}>📍 {p.meetingPoint}</div>
-            <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚗 ドライバー（座席計{p.totalCapacity}）</div>
-            {p.drivers.map(d=>{const mm=roster.find(r=>r.id===d.id);return mm?<div key={d.id} style={{fontSize:13,color:C.amber,marginBottom:2}}>・#{mm.num} {mm.name}（{d.capacity}席）</div>:null})}
-            <div style={{fontSize:11,color:C.dim,marginTop:8,marginBottom:4}}>🚙 乗合希望者（{p.riders.length}名）{p.overflow&&<span style={{color:"#f87171",fontWeight:700,marginLeft:4}}>⚠️ 定員オーバー</span>}</div>
-            {p.riders.map(r=>{const me=roster.find(x=>x.id===r.id);if(!me)return null;
-              const isAssigned=(p.assigned||[]).includes(r.id)||(!p.overflow&&!p.assigned);
-              return <div key={r.id} style={{fontSize:13,color:isAssigned?C.limeLight:C.muted,marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
-                <span>{isAssigned?"✅":"❓"}</span><span>#{me.num} {me.name}</span>
-              </div>})}
-            {p.overflow&&!p.assigned&&onCarpoolAmida&&<Btn variant="yellow" onClick={()=>onCarpoolAmida(event.id,p.meetingPoint,p.riders.map(r=>r.id),p.totalCapacity)} style={{marginTop:8}}>🎰 あみだで乗車者を決定</Btn>}
-          </div>)}
-          {m.unmatched.length>0&&<div style={{background:"rgba(239,68,68,0.08)",borderRadius:12,padding:12,marginTop:8}}>
-            <div style={{fontSize:12,color:"#f87171",fontWeight:700,marginBottom:4}}>⚠️ 乗合未成立 {m.unmatched.length}名</div>
-            <div style={{fontSize:11,color:C.dim,marginBottom:4}}>希望集合場所にドライバーがいません</div>
-            {m.unmatched.map(id=>{const me=roster.find(r=>r.id===id);return me?<div key={id} style={{fontSize:12,color:C.muted}}>・#{me.num} {me.name}</div>:null})}
+        </div>;
+      }
+      const driverIds=plan.selectedDrivers.map(d=>d.id);
+      const myIsDriver=memberId&&driverIds.includes(memberId);
+      const myAssignedDriver=memberId&&!myIsDriver?Object.entries(plan.assignments||{}).find(([d,riders])=>riders.includes(memberId))?.[0]:null;
+      const myIsUnassigned=memberId&&(plan.unassigned||[]).includes(memberId);
+      return <>
+        <div style={{...S.card,background:"rgba(132,204,22,0.05)",borderColor:"rgba(132,204,22,0.3)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontWeight:900,color:C.limeLight}}>🎯 配車プラン</div>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>onOptimizeCarpool(event.id)} style={S.btnSm}>🔄 再計算</button>
+              <button onClick={()=>{
+                const L=[`🚙 配車プラン`,`📌 ${event.title}`,`🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}`];
+                if(event.location){L.push(`📍 ${event.location}`);L.push(`🗺 ${mapUrl(event.location)}`)}
+                L.push("━━━━━━━━━━━━");
+                L.push(`✅ 参加可能: ${plan.coveredCount}/${plan.attendeeCount}名（${driverIds.length}台使用）`);
+                L.push("");
+                plan.selectedDrivers.forEach((d,i)=>{
+                  const dm=roster.find(r=>r.id===d.id);if(!dm)return;
+                  const mp=responses[d.id]?.meetingPoint;
+                  const tm=responses[d.id]?.driverDepartTime;
+                  L.push(`🚗 ${i+1}号車: #${dm.num} ${dm.name}（+${d.capacity}人乗合）`);
+                  if(mp)L.push(`  📍 ${mp}${tm?` ${tm}`:""}`);
+                  const riders=plan.assignments[d.id]||[];
+                  if(riders.length){L.push(`  ✅ 乗車: `+riders.map(rid=>{const me=roster.find(r=>r.id===rid);return me?`#${me.num} ${me.name}`:""}).filter(Boolean).join(", "))}
+                  L.push("");
+                });
+                if(plan.unassigned&&plan.unassigned.length){
+                  L.push("⚠️ 未割当（参加できない可能性）");
+                  plan.unassigned.forEach(id=>{const me=roster.find(r=>r.id===id);if(me)L.push(`  ・#${me.num} ${me.name}`)});
+                }
+                const txt=L.join("\n");
+                if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
+                else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
+                  const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！");
+                })}
+              }} style={S.btnSm}>📋 LINE共有</button>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <div style={{...S.stat,background:"rgba(132,204,22,0.1)"}}><div style={{fontSize:18,fontWeight:900,color:C.limeLight}}>{plan.coveredCount}<span style={{fontSize:11,color:C.dim}}>/{plan.attendeeCount}名</span></div><div style={{fontSize:11,color:C.muted}}>参加可能</div></div>
+            <div style={S.stat}><div style={{fontSize:18,fontWeight:900,color:C.amber}}>{driverIds.length}<span style={{fontSize:11,color:C.dim}}>/{event.parkingLimit||0}台</span></div><div style={{fontSize:11,color:C.muted}}>使用駐車場</div></div>
+            {plan.unassigned&&plan.unassigned.length>0&&<div style={S.stat}><div style={{fontSize:18,fontWeight:900,color:"#f87171"}}>{plan.unassigned.length}</div><div style={{fontSize:11,color:C.muted}}>未割当</div></div>}
+          </div>
+          {(()=>{const settings=getTeamSettings(teamMeta);return plan.selectedDrivers.map((d,i)=>{const dm=roster.find(r=>r.id===d.id);if(!dm)return null;
+            const riders=plan.assignments[d.id]||[];
+            const dResp=responses[d.id]||{};
+            const cost=computeDriverCost(event,settings,riders.length);
+            return <div key={d.id} style={{background:"rgba(0,0,0,0.2)",borderRadius:12,padding:12,marginBottom:8}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.amber,marginBottom:6}}>🚗 {i+1}号車: #{dm.num} {dm.name}（+{d.capacity}人乗合）</div>
+              {dResp.meetingPoint?<div style={{fontSize:12,color:C.limeLight,marginBottom:6}}>📍 {dResp.meetingPoint}{dResp.driverDepartTime?` ${dResp.driverDepartTime}`:""}</div>
+                :myIsDriver&&memberId===d.id?<div style={{background:"rgba(245,158,11,0.1)",borderRadius:8,padding:8,marginBottom:6,fontSize:11,color:C.amber}}>↓ あなたの集合場所・出発時刻を登録してください</div>
+                :<div style={{fontSize:11,color:C.dim,marginBottom:6}}>📍 集合場所未登録</div>}
+              {myIsDriver&&memberId===d.id&&<div style={{marginBottom:8}}>
+                <input value={driverMpInput} onChange={e=>setDriverMpInput(e.target.value)} placeholder="集合場所（例：○○駅 西口）" style={{...S.input,marginBottom:6,fontSize:13,padding:"8px 10px"}}/>
+                <input type="time" value={dResp.driverDepartTime||""} onChange={e=>onSaveCarpool(event.id,memberId,{driverDepartTime:e.target.value})} style={{...S.input,colorScheme:"dark",marginBottom:6,fontSize:13,padding:"8px 10px"}}/>
+                <button onClick={saveDriverMeetingPoint} disabled={savingCarpool} style={{...S.btnSm,background:C.amber,color:"#052e16",width:"100%"}}>{savingCarpool?"保存中...":"💾 集合場所を保存"}</button>
+              </div>}
+              {riders.length>0?<div>
+                <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚙 乗車者（{riders.length}/{d.capacity}名）</div>
+                {riders.map(rid=>{const m=roster.find(r=>r.id===rid);return m?<div key={rid} style={{fontSize:13,color:C.limeLight,marginBottom:2}}>・#{m.num} {m.name}{memberId===rid?" (あなた)":""}</div>:null})}
+              </div>:<div style={{fontSize:11,color:C.dim}}>🚙 乗車者なし</div>}
+              {cost&&riders.length>0&&<div style={{background:"rgba(56,189,248,0.08)",borderRadius:10,padding:10,marginTop:8,fontSize:12}}>
+                <div style={{color:C.sky,fontWeight:700,marginBottom:4}}>💰 費用按分</div>
+                <div style={{color:C.muted,fontSize:11,lineHeight:1.6}}>ガソリン代: {cost.gas.toLocaleString()}円{cost.toll>0?` ／ 高速: ${cost.toll.toLocaleString()}円`:""}{cost.handlingFee>0?` ／ 手間賃: ${cost.handlingFee.toLocaleString()}円`:""}</div>
+                <div style={{color:C.muted,fontSize:11,marginTop:2}}>合計: <b style={{color:"#fff"}}>{cost.total.toLocaleString()}円</b></div>
+                <div style={{marginTop:6,padding:"6px 10px",background:"rgba(56,189,248,0.15)",borderRadius:8,fontWeight:700,color:C.sky,fontSize:14}}>1人あたり: {cost.perPassenger.toLocaleString()}円 × {cost.numPassengers}名</div>
+              </div>}
+            </div>;
+          })})()}
+          {plan.unassigned&&plan.unassigned.length>0&&<div style={{background:"rgba(239,68,68,0.08)",borderRadius:12,padding:12,marginTop:8}}>
+            <div style={{fontSize:12,color:"#f87171",fontWeight:700,marginBottom:6}}>⚠️ 未割当 {plan.unassigned.length}名（駐車場枠不足）</div>
+            {plan.unassigned.map(id=>{const me=roster.find(r=>r.id===id);return me?<div key={id} style={{fontSize:12,color:C.muted}}>・#{me.num} {me.name}{memberId===id?" (あなた)":""}</div>:null})}
           </div>}
-        </div>}
+          {myAssignedDriver&&(()=>{const dm=roster.find(r=>r.id===myAssignedDriver);return dm?
+            <div style={{background:"rgba(56,189,248,0.1)",borderRadius:12,padding:12,marginTop:8,border:"1px solid rgba(56,189,248,0.3)"}}>
+              <div style={{fontSize:12,color:C.sky,fontWeight:700}}>📌 あなたは {dm.name}さんの車に乗車予定です</div>
+              {responses[myAssignedDriver]?.meetingPoint&&<div style={{fontSize:12,color:C.muted,marginTop:4}}>📍 {responses[myAssignedDriver].meetingPoint}{responses[myAssignedDriver]?.driverDepartTime?` ${responses[myAssignedDriver].driverDepartTime}`:""}</div>}
+            </div>:null;
+          })()}
+          {myIsUnassigned&&<div style={{background:"rgba(239,68,68,0.1)",borderRadius:12,padding:12,marginTop:8}}>
+            <div style={{fontSize:12,color:"#f87171",fontWeight:700}}>⚠️ あなたは現状未割当です。試合に参加できない可能性があります。</div>
+          </div>}
+        </div>
       </>;
     })()}
     </Accordion>}
   </div>);
 }
 // ── ADMIN SCREEN ──
-function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSaveEvent,onDeleteEvent,onSaveRoster,onRunLottery,onReLottery,onResetResponses,onBack,onNav,teamId,teamMeta,onUpdateTeamName,onLeaveTeam}){
+function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSaveEvent,onDeleteEvent,onSaveRoster,onRunLottery,onReLottery,onResetResponses,onBack,onNav,teamId,teamMeta,onUpdateTeamName,onLeaveTeam,onUpdateTeamSettings}){
   const[tab,setTab]=useState("events");
   const[msg,setMsg]=useState("");
   const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),3000)};
@@ -939,7 +1122,9 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
   const[teamNameDraft,setTeamNameDraft]=useState("");
   const[teamFlash,setTeamFlash]=useState("");
   const[copyFlash,setCopyFlash]=useState(false);
-  useEffect(()=>{if(tab==="team"&&teamMeta)setTeamNameDraft(teamMeta.name||"")},[tab,teamMeta?.name]);
+  const[settingsDraft,setSettingsDraft]=useState({});
+  const[settingsFlash,setSettingsFlash]=useState("");
+  useEffect(()=>{if(tab==="team"&&teamMeta){setTeamNameDraft(teamMeta.name||"");setSettingsDraft(getTeamSettings(teamMeta))}},[tab,teamMeta?.name]);
   const shareUrl=teamId?`${window.location.origin}${window.location.pathname.replace(/\/index[^/]*\.html$/,"/")}?team=${teamId}`:"";
   async function copyShareUrl(){
     try{await navigator.clipboard.writeText(shareUrl);setCopyFlash(true);setTimeout(()=>setCopyFlash(false),3000)}
@@ -951,6 +1136,15 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
   async function saveTeamName(){
     await onUpdateTeamName(teamNameDraft);
     setTeamFlash("✅ チーム名を更新しました");setTimeout(()=>setTeamFlash(""),3000);
+  }
+  async function saveSettings(){
+    const cleaned={
+      gasPrice:parseFloat(settingsDraft.gasPrice)||170,
+      fuelEconomy:parseFloat(settingsDraft.fuelEconomy)||10,
+      handlingFee:parseInt(settingsDraft.handlingFee)||0
+    };
+    await onUpdateTeamSettings(cleaned);
+    setSettingsFlash("✅ 設定を保存しました");setTimeout(()=>setSettingsFlash(""),3000);
   }
   async function leaveTeam(){
     if(!await confirm("このチームから抜けますか？\n（データは削除されません。再度コードで参加可能）"))return;
@@ -1075,14 +1269,39 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
     </div>
 
     <div style={S.card}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div>
-          <div style={{fontSize:13,fontWeight:700}}>🚙 配車調整機能</div>
-          <div style={{fontSize:11,color:C.dim,marginTop:2}}>抽選後に集合場所別の乗合マッチング</div>
-        </div>
-        <button onClick={()=>updateEv("carpoolEnabled",!editEv.carpoolEnabled)} style={{background:editEv.carpoolEnabled?C.lime:"rgba(255,255,255,0.1)",color:editEv.carpoolEnabled?"#052e16":"rgba(255,255,255,0.5)",border:"none",borderRadius:12,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{editEv.carpoolEnabled?"ON":"OFF"}</button>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>🎯 動作モード</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:10,borderRadius:12,background:(editEv.mode||"simple")==="simple"?"rgba(132,204,22,0.12)":"rgba(255,255,255,0.04)",border:(editEv.mode||"simple")==="simple"?"2px solid "+C.lime:"1px solid rgba(255,255,255,0.1)"}}>
+          <input type="radio" name="evmode" checked={(editEv.mode||"simple")==="simple"} onChange={()=>updateEv("mode","simple")} style={{marginTop:3}}/>
+          <div>
+            <div style={{fontSize:13,fontWeight:700}}>機能1: シンプル（駐車場抽選のみ）</div>
+            <div style={{fontSize:11,color:C.dim,marginTop:2,lineHeight:1.5}}>あみだくじで駐車場を抽選。乗合可能人数は表示するが、マッチングは行わない。落選者は保護者間で個別連絡</div>
+          </div>
+        </label>
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:10,borderRadius:12,background:editEv.mode==="carpool"?"rgba(56,189,248,0.12)":"rgba(255,255,255,0.04)",border:editEv.mode==="carpool"?"2px solid "+C.sky:"1px solid rgba(255,255,255,0.1)"}}>
+          <input type="radio" name="evmode" checked={editEv.mode==="carpool"} onChange={()=>updateEv("mode","carpool")} style={{marginTop:3}}/>
+          <div>
+            <div style={{fontSize:13,fontWeight:700}}>機能2: 乗合最適化（参加最大化）</div>
+            <div style={{fontSize:11,color:C.dim,marginTop:2,lineHeight:1.5}}>駐車枠数 + 各車両の乗車可能人数から、参加人数が最大になる様に乗合車を自動選定。集合場所・時間・費用按分まで管理</div>
+          </div>
+        </label>
       </div>
     </div>
+
+    {editEv.mode==="carpool"&&<div style={S.card}>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>💰 費用算定（機能2 / 任意）</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🛣 往復距離（km）</div>
+          <input type="number" min="0" step="0.1" value={editEv.roundTripKm||""} onChange={e=>updateEv("roundTripKm",e.target.value?parseFloat(e.target.value):"")} placeholder="例：50" style={S.input}/>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚗 高速代（円・往復合計）</div>
+          <input type="number" min="0" step="100" value={editEv.tollFee||""} onChange={e=>updateEv("tollFee",e.target.value?parseInt(e.target.value):"")} placeholder="例：2000" style={S.input}/>
+        </div>
+      </div>
+      <p style={{fontSize:10,color:C.dim,marginTop:8,lineHeight:1.5}}>※ ガソリン代はチーム設定の「ガソリン単価」「燃費」と往復距離から自動計算されます</p>
+    </div>}
 
     <ErrMsg msg={evErr}/>
     <Btn onClick={saveEditEv} style={{marginBottom:8}}>💾 保存する</Btn>
@@ -1206,6 +1425,25 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
           })}
         }} style={{...S.btnSm,width:"100%",marginTop:8}}>📢 LINE用招待文を生成</button>
       </div>}
+      {teamId&&<div style={S.card}>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>💰 費用算定設定（機能2用）</div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⛽ ガソリン単価（円/L）</div>
+          <input type="number" min="0" step="1" value={settingsDraft.gasPrice||""} onChange={e=>setSettingsDraft(s=>({...s,gasPrice:e.target.value}))} placeholder="170" style={S.input}/>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚗 燃費（km/L）</div>
+          <input type="number" min="0" step="0.1" value={settingsDraft.fuelEconomy||""} onChange={e=>setSettingsDraft(s=>({...s,fuelEconomy:e.target.value}))} placeholder="10" style={S.input}/>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>💵 手間賃（円・ドライバーへの謝礼／往復1回あたり）</div>
+          <input type="number" min="0" step="100" value={settingsDraft.handlingFee??""} onChange={e=>setSettingsDraft(s=>({...s,handlingFee:e.target.value}))} placeholder="0" style={S.input}/>
+        </div>
+        <FlashMsg msg={settingsFlash}/>
+        <Btn onClick={saveSettings}>💾 費用設定を保存</Btn>
+        <p style={{fontSize:10,color:C.dim,marginTop:8,lineHeight:1.5}}>※ 試合作成時に「往復距離」「高速代」を入力すると、これらの設定値から1人あたりの負担金額を自動計算します</p>
+      </div>}
+
       {teamId&&<div style={S.card}>
         <div style={{fontSize:12,color:C.dim,marginBottom:8}}>チーム切替</div>
         <p style={{fontSize:11,color:C.dim,marginBottom:8,lineHeight:1.5}}>このチームから抜けて、別のチームに参加できます（データは削除されません）</p>
@@ -1401,6 +1639,8 @@ function App(){
   const[errorMsg,setErrorMsg]=useState("");
   const[teamId,setTeamIdState]=useState(TEAM_ID);
   const[teamMeta,setTeamMeta]=useState(null);
+  const[maintenanceNotice,setMaintenanceNotice]=useState(null);
+  useEffect(()=>{fbRootGet("maintenance").then(n=>setMaintenanceNotice(n))},[screen]);
   const editingRef=useRef(false);
   const screenRef=useRef("loading");
 
@@ -1432,6 +1672,12 @@ function App(){
   async function handleUpdateTeamName(name){
     if(!teamId)return;
     const updated={...(teamMeta||{}),name:name.trim()||"無名チーム"};
+    await fbSet("meta",updated);
+    setTeamMeta(updated);
+  }
+  async function handleUpdateTeamSettings(settings){
+    if(!teamId)return;
+    const updated={...(teamMeta||{}),settings:{...(teamMeta?.settings||{}),...settings}};
     await fbSet("meta",updated);
     setTeamMeta(updated);
   }
@@ -1543,6 +1789,15 @@ function App(){
     const participants=state.eligibleLosers.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
     setSelectedEventId(eventId);setLottParticipants(participants);setLottLimit(state.openSlots);setLottIsRerun(true);setLottMode("parking");navigate("lottery");
   }
+  async function handleOptimizeCarpool(eventId){
+    const ev=events.find(e=>e.id===eventId);
+    const resp=allResponses[eventId]||{};
+    const plan=computeCarpoolPlan(ev,resp);
+    if(!plan){alert("参加者がいません");return}
+    const lott={conducted:true,conductedAt:Date.now(),winners:plan.selectedDrivers.map(d=>d.id),allParticipants:Object.keys(resp).filter(id=>resp[id].attending),carpoolPlan:{...plan,computedAt:Date.now()}};
+    await fbSet(`lotteries/${eventId}`,lott);
+    setAllLotteries(p=>({...p,[eventId]:lott}));
+  }
   async function handleCarpoolAmida(eventId,meetingPoint,riderIds,capacity){
     const participants=riderIds.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
     if(participants.length===0){alert("乗合希望者がいません");return}
@@ -1579,7 +1834,17 @@ function App(){
 
   if(screen==="landing")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff"}}>
     <LandingScreen onCreate={handleCreateTeam} onJoin={handleJoinTeam}
-      onPrivacy={()=>navigate("privacy")} onTerms={()=>navigate("terms")}/>
+      onPrivacy={()=>navigate("privacy")} onTerms={()=>navigate("terms")}
+      onGlobalAdmin={()=>navigate(sessionStorage.getItem("global_admin")==="1"?"gadmin":"gadmin_login")}
+      maintenanceNotice={maintenanceNotice}/>
+  </div>);
+
+  if(screen==="gadmin_login")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff"}}>
+    <GlobalAdminLogin onLogin={()=>navigate("gadmin")} onBack={()=>navigate(teamId?"home":"landing")}/>
+  </div>);
+
+  if(screen==="gadmin")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff",padding:"24px 16px 80px"}}>
+    <GlobalAdminDashboard onBack={()=>navigate(teamId?"home":"landing")} onLogout={()=>navigate("landing")}/>
   </div>);
 
   if(screen==="privacy"||screen==="terms")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff",padding:"24px 16px 80px"}}>
@@ -1603,15 +1868,15 @@ function App(){
   return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff",padding:"0 16px 80px",position:"relative"}}>
     {syncing&&<div style={{position:"fixed",top:12,right:12,background:"rgba(0,0,0,0.5)",color:C.limeLight,padding:"4px 8px",borderRadius:8,fontSize:11,fontWeight:700,zIndex:100,backdropFilter:"blur(4px)"}}>↻ 同期中</div>}
     <div style={{maxWidth:460,margin:"0 auto",paddingTop:24}}>
-      {screen==="home"&&<HomeScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries} onNav={navigate} onSelectEvent={setSelectedEventId} loading={dataLoading} teamMeta={teamMeta}/>}
+      {screen==="home"&&<HomeScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries} onNav={navigate} onSelectEvent={setSelectedEventId} loading={dataLoading} teamMeta={teamMeta} maintenanceNotice={maintenanceNotice}/>}
       {screen==="event"&&<EventScreen event={selEv} roster={roster} responses={selResp} lottery={selLott}
-        onBack={()=>navigate("home")} onSubmit={handleSubmit} onNav={navigate} onCarpoolAmida={handleCarpoolAmida} onSaveCarpool={handleSaveCarpool}
+        onBack={()=>navigate("home")} onSubmit={handleSubmit} onNav={navigate} onCarpoolAmida={handleCarpoolAmida} onSaveCarpool={handleSaveCarpool} onOptimizeCarpool={handleOptimizeCarpool} teamMeta={teamMeta}
       />}
       {screen==="admin"&&<AdminScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries}
         onSelectEvent={setSelectedEventId} onSaveEvent={handleSaveEvent} onDeleteEvent={handleDeleteEvent}
         onSaveRoster={handleSaveRoster} onRunLottery={handleRunLottery} onReLottery={handleReLottery} onResetResponses={handleResetResponses}
         onBack={()=>navigate("home")} onNav={navigate}
-        teamId={teamId} teamMeta={teamMeta} onUpdateTeamName={handleUpdateTeamName} onLeaveTeam={handleLeaveTeam}/>
+        teamId={teamId} teamMeta={teamMeta} onUpdateTeamName={handleUpdateTeamName} onLeaveTeam={handleLeaveTeam} onUpdateTeamSettings={handleUpdateTeamSettings}/>
       }
       {screen==="lottery"&&<LotteryScreen event={selEv} participants={lottParticipants} limit={lottLimit} isRerun={lottIsRerun} mode={lottMode} carpoolPoint={lottCarpoolPoint} onComplete={handleCompleteLottery} onBack={()=>navigate(lottMode==="carpool"?"event":"admin")}/>}
       {screen==="results"&&<ResultsScreen event={selEv} roster={roster} responses={selResp} lottery={selLott}
