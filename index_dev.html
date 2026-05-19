@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>🔧 [DEV] ⚽ 駐車場抽選</title>
-  <meta name="description" content="サッカーチームの駐車場抽選アプリ">
-  <meta property="og:title" content="⚽ 駐車場抽選">
-  <meta property="og:description" content="サッカーの試合時の駐車場抽選アプリ">
+  <title>🔧 [DEV] 🏆 駐車場抽選</title>
+  <meta name="description" content="ジュニアスポーツの駐車場・配車調整アプリ">
+  <meta property="og:title" content="🏆 駐車場抽選 PRO">
+  <meta property="og:description" content="ジュニアスポーツの試合時の駐車場・配車調整アプリ">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#071e07">
@@ -186,7 +186,7 @@ function genICS(ev){
   let end;
   if(ev.endTime){end=applyTime(ev.matchDate,ev.endTime)}
   else{end=new Date(start);end.setHours(end.getHours()+2)}
-  const summary=ev.opponent?`⚽ ${ev.title} vs ${ev.opponent}`:`⚽ ${ev.title}`;
+  const summary=ev.opponent?`🏆 ${ev.title} vs ${ev.opponent}`:`🏆 ${ev.title}`;
   const descLines=[];
   if(ev.opponent)descLines.push(`対戦相手: ${ev.opponent}`);
   if(ev.meetTime)descLines.push(`集合: ${ev.meetTime}`);
@@ -356,9 +356,9 @@ function LandingScreen({onCreate,onJoin,onPrivacy,onTerms}){
   }
   return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 16px"}}>
     <div style={{textAlign:"center",marginBottom:32}}>
-      <div style={{fontSize:64,marginBottom:12,animation:"spFloat 3s ease-in-out infinite"}}>⚽</div>
+      <div style={{fontSize:64,marginBottom:12,animation:"spFloat 3s ease-in-out infinite"}}>🏆</div>
       <h1 style={{fontSize:28,fontWeight:900,margin:0}}>駐車場 抽選</h1>
-      <p style={{color:C.limeLight,fontWeight:700,marginTop:6,fontSize:13}}>Soccer Parking Lottery</p>
+      <p style={{color:C.limeLight,fontWeight:700,marginTop:6,fontSize:13}}>Sports Parking Lottery</p>
       <p style={{color:C.muted,marginTop:16,fontSize:13,lineHeight:1.6,maxWidth:340}}>ジュニアスポーツチームの<br/>駐車場・配車調整アプリ</p>
     </div>
     {!mode&&<div style={{width:"100%",maxWidth:340}}>
@@ -398,7 +398,7 @@ function LegalScreen({type,onBack}){
     <BackBar title={isPrivacy?"プライバシーポリシー":"利用規約"} onBack={onBack} label="← 戻る"/>
     <div style={{...S.card,lineHeight:1.8,fontSize:13,whiteSpace:"pre-wrap"}}>
       {isPrivacy?
-`本アプリ「⚽ 駐車場抽選」は、ジュニアスポーツチームの保護者間で駐車場や乗合を調整するためのツールです。
+`本アプリ「🏆 駐車場抽選」は、ジュニアスポーツチームの保護者間で駐車場や乗合を調整するためのツールです。
 
 【収集する情報】
 ・選手の名前、背番号、学年
@@ -502,9 +502,9 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
 
   return(<div>
     <div style={{textAlign:"center",padding:"28px 0 20px"}}>
-      <div style={{fontSize:52,marginBottom:10,display:"inline-block",animation:"spFloat 3s ease-in-out infinite"}}>⚽</div>
+      <div style={{fontSize:52,marginBottom:10,display:"inline-block",animation:"spFloat 3s ease-in-out infinite"}}>🏆</div>
       <h1 style={{fontSize:26,fontWeight:900,margin:0}}>駐車場 抽選</h1>
-      {teamMeta?.name?<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:14}}>🏆 {teamMeta.name}</p>:<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:13}}>Soccer Parking Lottery</p>}
+      {teamMeta?.name?<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:14}}>🏆 {teamMeta.name}</p>:<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:13}}>Sports Parking Lottery</p>}
     </div>
     {loading?<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>読み込み中...</div>
     :!featured&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
@@ -663,7 +663,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       </div>}
       {(event.meetTime||event.kickoffTime||event.endTime)&&<div style={{marginBottom:10,display:"flex",gap:16,flexWrap:"wrap"}}>
         {event.meetTime&&<div><div style={{fontSize:11,color:C.dim}}>⏰ 集合</div><div style={{fontSize:15,fontWeight:700}}>{event.meetTime}</div></div>}
-        {event.kickoffTime&&<div><div style={{fontSize:11,color:C.dim}}>⚽ キックオフ</div><div style={{fontSize:15,fontWeight:700}}>{event.kickoffTime}</div></div>}
+        {event.kickoffTime&&<div><div style={{fontSize:11,color:C.dim}}>🏆 キックオフ</div><div style={{fontSize:15,fontWeight:700}}>{event.kickoffTime}</div></div>}
         {event.endTime&&<div><div style={{fontSize:11,color:C.dim}}>🏁 終了予定</div><div style={{fontSize:15,fontWeight:700}}>{event.endTime}</div></div>}
       </div>}
       {event.uniformColor&&<div style={{marginBottom:10}}>
@@ -740,7 +740,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       </div>}
       {memberId&&showForm&&<>
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>⚽ 試合に参加しますか？</div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🏆 試合に参加しますか？</div>
           <div style={{display:"flex",gap:8}}>
             <button onClick={()=>setAttending(true)} style={S.choice(attending===true,"lime")}>✅ 参加する</button>
             <button onClick={()=>{setAttending(false);setParking(false)}} style={S.choice(attending===false,"rose")}>❌ 欠席</button>
@@ -1039,7 +1039,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
           <input type="time" value={editEv.meetTime||""} onChange={e=>updateEv("meetTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⚽ キックオフ</div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🏆 キックオフ</div>
           <input type="time" value={editEv.kickoffTime||""} onChange={e=>updateEv("kickoffTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
         </div>
         <div style={{marginBottom:10}}>
@@ -1122,7 +1122,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
             <button onClick={()=>{
               const url=window.location.href.split('#')[0];
               const details=fmtMatchDetails(ev);
-              const txt=`⚽ 新しい試合のお知らせ\n━━━━━━━━━━━━\n📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}${details?"\n"+details:""}\n⏰ 締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n━━━━━━━━━━━━\n👇 参加・駐車場の回答はこちら\n${url}`;
+              const txt=`🏆 新しい試合のお知らせ\n━━━━━━━━━━━━\n📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}${details?"\n"+details:""}\n⏰ 締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n━━━━━━━━━━━━\n👇 参加・駐車場の回答はこちら\n${url}`;
               if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
               else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
                 const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！LINEに貼り付けてください");
@@ -1199,7 +1199,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
         <div style={{background:"rgba(0,0,0,0.25)",borderRadius:10,padding:"10px 12px",fontSize:11,color:C.muted,wordBreak:"break-all",marginBottom:8}}>{shareUrl}</div>
         <Btn onClick={copyShareUrl}>{copyFlash?"✅ コピーしました":"📋 URLをコピー"}</Btn>
         <button onClick={()=>{
-          const txt=`⚽ 駐車場抽選アプリ\n━━━━━━━━━━━━\n📌 ${teamMeta?.name||"チーム"} 専用URL\n🔑 チームコード: ${teamId}\n━━━━━━━━━━━━\n👇 こちらから参加してください\n${shareUrl}`;
+          const txt=`🏆 駐車場抽選アプリ\n━━━━━━━━━━━━\n📌 ${teamMeta?.name||"チーム"} 専用URL\n🔑 チームコード: ${teamId}\n━━━━━━━━━━━━\n👇 こちらから参加してください\n${shareUrl}`;
           if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
           else{navigator.clipboard.writeText(txt).then(()=>alert("LINE文をコピーしました")).catch(()=>{
             const el=document.createElement("textarea");el.value=txt;document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました");
@@ -1315,7 +1315,7 @@ function ResultsScreen({event,roster,responses,lottery,onReLottery,onBack}){
   const noReply=er.filter(r=>!responses[r.id]);
 
   function genText(){
-    const L=[`⚽ 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`];
+    const L=[`🏆 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`];
     if(event?.location){L.push(`📍 ${event.location}`);L.push(`🗺 ${mapUrl(event.location)}`)}
     L.push("━━━━━━━━━━━━");
     const formatName = (user) => {
@@ -1587,7 +1587,7 @@ function App(){
   </div>);
 
   if(screen==="loading")return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
-    <div style={{textAlign:"center"}}><div style={{fontSize:48,color:C.limeLight,animation:"spFloat 1s ease-in-out infinite"}}>⚽</div><p style={{color:C.muted,marginTop:12,fontSize:14}}>読み込み中...</p></div>
+    <div style={{textAlign:"center"}}><div style={{fontSize:48,color:C.limeLight,animation:"spFloat 1s ease-in-out infinite"}}>🏆</div><p style={{color:C.muted,marginTop:12,fontSize:14}}>読み込み中...</p></div>
   </div>);
 
   if(screen==="error")return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
