@@ -9,16 +9,16 @@
   <meta property="og:description" content="ジュニアスポーツの試合時の駐車場・配車調整アプリ">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#061831">
+  <meta name="theme-color" content="#1e3a6f">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     html,body,#root{height:100%}
-    body{font-family:'Noto Sans JP',sans-serif;background:#061831;color:#fff;-webkit-font-smoothing:antialiased}
+    body{font-family:'Noto Sans JP',sans-serif;background:#1e3a6f;color:#fff;-webkit-font-smoothing:antialiased}
     input,select,button{font-family:inherit}
     input::placeholder{color:rgba(255,255,255,0.25)}
-    select option{background:#0a1c3a;color:#fff}
+    select option{background:#1a2e58;color:#fff}
     input[type=datetime-local]::-webkit-calendar-picker-indicator{filter:invert(0.7)}
     @keyframes spFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
     @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -88,20 +88,20 @@ const DEFAULT_ROSTER=[
 ];
 
 // ── Design ──
-const C={bg:"#061831",bg2:"#0d2549",card:"rgba(255,255,255,0.07)",cardBorder:"rgba(255,255,255,0.12)",lime:"#60a5fa",limeLight:"#93c5fd",amber:"#f59e0b",rose:"#e11d48",sky:"#38bdf8",muted:"rgba(255,255,255,0.45)",dim:"rgba(255,255,255,0.25)",faint:"rgba(255,255,255,0.15)"};
+const C={bg:"#1e3a6f",bg2:"#2a5096",card:"rgba(255,255,255,0.07)",cardBorder:"rgba(255,255,255,0.12)",lime:"#93c5fd",limeLight:"#bae6fd",amber:"#f59e0b",rose:"#e11d48",sky:"#38bdf8",muted:"rgba(255,255,255,0.45)",dim:"rgba(255,255,255,0.25)",faint:"rgba(255,255,255,0.15)"};
 const S={
   card:{background:C.card,border:`1px solid ${C.cardBorder}`,borderRadius:16,padding:16,marginBottom:12},
   cardAmber:{background:"rgba(245,158,11,0.07)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:16,padding:16,marginBottom:12},
-  cardLime:{background:"rgba(96,165,250,0.05)",border:"1px solid rgba(96,165,250,0.35)",borderRadius:16,padding:16,marginBottom:12},
+  cardLime:{background:"rgba(147,197,253,0.05)",border:"1px solid rgba(147,197,253,0.35)",borderRadius:16,padding:16,marginBottom:12},
   cardLock:{background:"rgba(56,189,248,0.05)",border:"1px solid rgba(56,189,248,0.3)",borderRadius:16,padding:16,marginBottom:12},
   input:{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"10px 14px",color:"#fff",fontSize:14,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"inherit"},
-  select:{background:"#0a1c3a",border:"1px solid rgba(255,255,255,0.25)",borderRadius:12,padding:"12px 16px",color:"#fff",fontSize:16,outline:"none",width:"100%",boxSizing:"border-box",appearance:"none",fontFamily:"inherit"},
+  select:{background:"#1a2e58",border:"1px solid rgba(255,255,255,0.25)",borderRadius:12,padding:"12px 16px",color:"#fff",fontSize:16,outline:"none",width:"100%",boxSizing:"border-box",appearance:"none",fontFamily:"inherit"},
   btnP:{background:C.lime,color:"#052e16",border:"none",borderRadius:16,padding:"14px 20px",fontSize:16,fontWeight:700,cursor:"pointer",width:"100%",fontFamily:"inherit",display:"block",textAlign:"center"},
   btnG:{background:"rgba(255,255,255,0.1)",color:"#fff",border:"none",borderRadius:16,padding:"14px 20px",fontSize:16,fontWeight:700,cursor:"pointer",width:"100%",fontFamily:"inherit",display:"block",textAlign:"center"},
   btnY:{background:C.amber,color:"#052e16",border:"none",borderRadius:16,padding:"14px 20px",fontSize:16,fontWeight:700,cursor:"pointer",width:"100%",fontFamily:"inherit",display:"block",textAlign:"center"},
   btnSm:{background:"rgba(255,255,255,0.1)",color:"#fff",border:"none",borderRadius:12,padding:"8px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"},
   btnSmY:{background:C.amber,color:"#052e16",border:"none",borderRadius:12,padding:"8px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"},
-  btnSmO:{background:"transparent",color:C.limeLight,border:"2px solid rgba(96,165,250,0.4)",borderRadius:12,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"},
+  btnSmO:{background:"transparent",color:C.limeLight,border:"2px solid rgba(147,197,253,0.4)",borderRadius:12,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"},
   stat:{background:"rgba(0,0,0,0.25)",borderRadius:12,padding:"10px 6px",textAlign:"center",flex:1},
   row:{display:"flex",alignItems:"center",justifyContent:"space-between"},
   choice:(sel,color)=>{const m={lime:{bg:C.lime,t:"#052e16"},rose:{bg:C.rose,t:"#fff"},amber:{bg:C.amber,t:"#052e16"}}[color];return sel?{background:m.bg,color:m.t,border:"none",borderRadius:12,padding:"12px 8px",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",flex:1,transition:"all .2s"}:{background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",border:"none",borderRadius:12,padding:"12px 8px",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",flex:1,transition:"all .2s"}},
@@ -376,11 +376,11 @@ function Btn({children,onClick,variant="primary",disabled,style:ex}){
   return <button onClick={onClick} disabled={disabled} style={{...base,opacity:disabled?.4:1,cursor:disabled?"not-allowed":"pointer",...ex}}>{children}</button>;
 }
 function Tag({label,color="white"}){
-  const m={lime:{bg:"rgba(96,165,250,0.15)",t:"#93c5fd"},amber:{bg:"rgba(245,158,11,0.15)",t:"#fbbf24"},red:{bg:"rgba(239,68,68,0.15)",t:"#f87171"},gray:{bg:"rgba(255,255,255,0.06)",t:"rgba(255,255,255,0.3)"},sky:{bg:"rgba(56,189,248,0.15)",t:"#38bdf8"},white:{bg:"rgba(255,255,255,0.1)",t:"rgba(255,255,255,0.6)"}}[color]||{bg:"rgba(255,255,255,0.1)",t:"rgba(255,255,255,0.6)"};
+  const m={lime:{bg:"rgba(147,197,253,0.15)",t:"#bae6fd"},amber:{bg:"rgba(245,158,11,0.15)",t:"#fbbf24"},red:{bg:"rgba(239,68,68,0.15)",t:"#f87171"},gray:{bg:"rgba(255,255,255,0.06)",t:"rgba(255,255,255,0.3)"},sky:{bg:"rgba(56,189,248,0.15)",t:"#38bdf8"},white:{bg:"rgba(255,255,255,0.1)",t:"rgba(255,255,255,0.6)"}}[color]||{bg:"rgba(255,255,255,0.1)",t:"rgba(255,255,255,0.6)"};
   return <span style={{background:m.bg,color:m.t,borderRadius:999,padding:"2px 8px",fontSize:11,whiteSpace:"nowrap",display:"inline-block"}}>{label}</span>;
 }
 function ErrMsg({msg}){if(!msg)return null;return<p style={{color:"#f87171",background:"rgba(239,68,68,0.1)",borderRadius:12,padding:"8px 14px",textAlign:"center",fontSize:14,margin:"8px 0"}}>{msg}</p>}
-function FlashMsg({msg}){if(!msg)return null;return<p style={{color:C.limeLight,background:"rgba(96,165,250,0.1)",borderRadius:12,padding:"8px 14px",textAlign:"center",fontSize:14,margin:"8px 0"}}>{msg}</p>}
+function FlashMsg({msg}){if(!msg)return null;return<p style={{color:C.limeLight,background:"rgba(147,197,253,0.1)",borderRadius:12,padding:"8px 14px",textAlign:"center",fontSize:14,margin:"8px 0"}}>{msg}</p>}
 function BackBar({title,onBack,label="← 戻る"}){
   return(<div style={{display:"flex",alignItems:"center",gap:0,marginBottom:20,background:"rgba(0,0,0,0.3)",borderRadius:16,padding:"4px"}}>
     <button onClick={onBack} style={{background:"none",border:"none",color:"rgba(255,255,255,0.6)",fontSize:14,cursor:"pointer",padding:"10px 16px",fontFamily:"inherit",fontWeight:700,borderRadius:12,flexShrink:0,whiteSpace:"nowrap"}}>{label}</button>
@@ -640,9 +640,9 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
     const isPast=ev.deadline&&now>new Date(ev.deadline);
     const tl=ev.deadline&&!isPast?getTimeLeft(ev.deadline):null;
     let badge=null,bc=C.cardBorder;
-    if(lott?.conducted){badge=<Tag label="✅ 抽選完了" color="lime"/>;bc="rgba(96,165,250,0.4)"}
+    if(lott?.conducted){badge=<Tag label="✅ 抽選完了" color="lime"/>;bc="rgba(147,197,253,0.4)"}
     else if(isPast&&hopefuls>lottSlots&&lottSlots>0){badge=<Tag label="⚠️ 抽選待ち" color="amber"/>;bc="rgba(245,158,11,0.4)"}
-    else if(isPast&&hopefuls>0&&hopefuls<=lottSlots){badge=<Tag label="✅ 全員OK" color="lime"/>;bc="rgba(96,165,250,0.3)"}
+    else if(isPast&&hopefuls>0&&hopefuls<=lottSlots){badge=<Tag label="✅ 全員OK" color="lime"/>;bc="rgba(147,197,253,0.3)"}
     else if(isPast){badge=<Tag label="締切済" color="gray"/>}
     else if(tl){badge=<Tag label={`⏱ ${tl}`} color="sky"/>}
     return(
@@ -851,7 +851,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       {event.matchDate&&<button onClick={()=>downloadICS(event)} style={{...S.btnSm,width:"100%",padding:"10px 16px",marginTop:4}}>📅 カレンダーに追加</button>}
     </Accordion>}
 
-    <Accordion title="🚗 駐車場" open={sectionOpen.parking} onToggle={()=>toggleSection("parking")} accent="rgba(96,165,250,0.3)" badge={lottery?.conducted?<Tag label="抽選済" color="lime"/>:null}>
+    <Accordion title="🚗 駐車場" open={sectionOpen.parking} onToggle={()=>toggleSection("parking")} accent="rgba(147,197,253,0.3)" badge={lottery?.conducted?<Tag label="抽選済" color="lime"/>:null}>
     <div style={{display:"flex",gap:8,marginBottom:12}}>
       {[{n:answered,of:er.length,l:"回答済み",c:C.limeLight},{n:hopefuls.length,of:lottSlots,l:"駐車場希望",c:C.amber},{n:limit,of:null,l:"上限台数",c:C.sky}].map(({n,of,l,c})=>
         <div key={l} style={S.stat}><div style={{fontSize:20,fontWeight:900,color:c}}>{n}{of!=null&&<span style={{fontSize:11,color:C.dim}}>/{of}</span>}</div><div style={{fontSize:11,color:C.muted,lineHeight:1.3}}>{l}</div></div>
@@ -866,7 +866,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       <div style={{fontSize:11,color:C.dim,marginTop:8}}>抽選枠: {lottSlots}台</div>
     </div>}
 
-    {event.deadline&&<div style={{...S.card,display:"flex",justifyContent:"space-between",alignItems:"center",borderColor:isPast?"rgba(239,68,68,0.35)":"rgba(96,165,250,0.3)"}}>
+    {event.deadline&&<div style={{...S.card,display:"flex",justifyContent:"space-between",alignItems:"center",borderColor:isPast?"rgba(239,68,68,0.35)":"rgba(147,197,253,0.3)"}}>
       <div><div style={{fontSize:12,color:C.dim}}>回答締切</div><div style={{fontWeight:700,fontSize:14}}>{fmtDateTime(event.deadline)}</div></div>
       {isPast?<Tag label="締切済み" color="red"/>:tl?<span style={{color:C.limeLight,fontWeight:700,fontSize:14}}>⏱ 残り {tl}</span>:null}
     </div>}
@@ -884,7 +884,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       <p style={{color:C.dim,fontSize:12}}>希望 {hopefuls.length}名 ≤ {lottSlots}台</p>
     </div>}
 
-    {!lottery?.conducted&&<div style={{...S.card,borderColor:"rgba(96,165,250,0.3)"}}>
+    {!lottery?.conducted&&<div style={{...S.card,borderColor:"rgba(147,197,253,0.3)"}}>
       <div style={{fontSize:14,fontWeight:900,color:C.limeLight,marginBottom:12}}>✏️ 参加登録{isPast?" (締切後)":""}</div>
       {isPast&&<p style={{color:C.amber,fontSize:12,marginBottom:8}}>⚠️ 締切を過ぎていますが登録できます</p>}
       <div style={{marginBottom:12}}>
@@ -898,7 +898,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
         <p style={{color:C.sky,fontWeight:700,fontSize:14}}>🔒 駐車場確定枠です</p>
         <p style={{color:C.dim,fontSize:12}}>抽選なしで駐車場を利用できます</p>
       </div>}
-      {memberId&&myResp&&!editing&&<div style={{background:"rgba(96,165,250,0.08)",borderRadius:12,padding:12,marginBottom:12}}>
+      {memberId&&myResp&&!editing&&<div style={{background:"rgba(147,197,253,0.08)",borderRadius:12,padding:12,marginBottom:12}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
             <div style={{fontSize:13}}>{myResp.attending?"✅ 参加":"❌ 欠席"}</div>
@@ -949,7 +949,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
     </div>}
     </Accordion>
 
-    {getEventMode(event)==="carpool"&&<Accordion title="🚙 配車（機能2）" open={sectionOpen.carpool} onToggle={()=>toggleSection("carpool")} accent="rgba(96,165,250,0.4)">
+    {getEventMode(event)==="carpool"&&<Accordion title="🚙 配車（機能2）" open={sectionOpen.carpool} onToggle={()=>toggleSection("carpool")} accent="rgba(147,197,253,0.4)">
     {(()=>{
       const plan=lottery?.carpoolPlan;
       const attendCount=Object.values(responses).filter(r=>r&&r.attending).length;
@@ -968,7 +968,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       const myAssignedDriver=memberId&&!myIsDriver?Object.entries(plan.assignments||{}).find(([d,riders])=>riders.includes(memberId))?.[0]:null;
       const myIsUnassigned=memberId&&(plan.unassigned||[]).includes(memberId);
       return <>
-        <div style={{...S.card,background:"rgba(96,165,250,0.05)",borderColor:"rgba(96,165,250,0.3)"}}>
+        <div style={{...S.card,background:"rgba(147,197,253,0.05)",borderColor:"rgba(147,197,253,0.3)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontWeight:900,color:C.limeLight}}>🎯 配車プラン</div>
             <div style={{display:"flex",gap:6}}>
@@ -1002,7 +1002,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
             </div>
           </div>
           <div style={{display:"flex",gap:8,marginBottom:12}}>
-            <div style={{...S.stat,background:"rgba(96,165,250,0.1)"}}><div style={{fontSize:18,fontWeight:900,color:C.limeLight}}>{plan.coveredCount}<span style={{fontSize:11,color:C.dim}}>/{plan.attendeeCount}名</span></div><div style={{fontSize:11,color:C.muted}}>参加可能</div></div>
+            <div style={{...S.stat,background:"rgba(147,197,253,0.1)"}}><div style={{fontSize:18,fontWeight:900,color:C.limeLight}}>{plan.coveredCount}<span style={{fontSize:11,color:C.dim}}>/{plan.attendeeCount}名</span></div><div style={{fontSize:11,color:C.muted}}>参加可能</div></div>
             <div style={S.stat}><div style={{fontSize:18,fontWeight:900,color:C.amber}}>{driverIds.length}<span style={{fontSize:11,color:C.dim}}>/{event.parkingLimit||0}台</span></div><div style={{fontSize:11,color:C.muted}}>使用駐車場</div></div>
             {plan.unassigned&&plan.unassigned.length>0&&<div style={S.stat}><div style={{fontSize:18,fontWeight:900,color:"#f87171"}}>{plan.unassigned.length}</div><div style={{fontSize:11,color:C.muted}}>未割当</div></div>}
           </div>
@@ -1272,7 +1272,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
     <div style={S.card}>
       <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>🎯 動作モード</div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:10,borderRadius:12,background:(editEv.mode||"simple")==="simple"?"rgba(96,165,250,0.12)":"rgba(255,255,255,0.04)",border:(editEv.mode||"simple")==="simple"?"2px solid "+C.lime:"1px solid rgba(255,255,255,0.1)"}}>
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:10,borderRadius:12,background:(editEv.mode||"simple")==="simple"?"rgba(147,197,253,0.12)":"rgba(255,255,255,0.04)",border:(editEv.mode||"simple")==="simple"?"2px solid "+C.lime:"1px solid rgba(255,255,255,0.1)"}}>
           <input type="radio" name="evmode" checked={(editEv.mode||"simple")==="simple"} onChange={()=>updateEv("mode","simple")} style={{marginTop:3}}/>
           <div>
             <div style={{fontSize:13,fontWeight:700}}>機能1: シンプル（駐車場抽選のみ）</div>
@@ -1372,7 +1372,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
         </div>)}
         <div ref={endRef}/>
       </div>
-      <button onClick={addRow} style={{background:"rgba(96,165,250,0.1)",border:"1px dashed rgba(96,165,250,0.3)",borderRadius:12,color:C.limeLight,fontSize:14,cursor:"pointer",width:"100%",padding:"12px",marginBottom:12,fontFamily:"inherit"}}>＋ メンバーを追加</button>
+      <button onClick={addRow} style={{background:"rgba(147,197,253,0.1)",border:"1px dashed rgba(147,197,253,0.3)",borderRadius:12,color:C.limeLight,fontSize:14,cursor:"pointer",width:"100%",padding:"12px",marginBottom:12,fontFamily:"inherit"}}>＋ メンバーを追加</button>
       <Btn onClick={saveRoster} style={{marginBottom:8}}>💾 保存する</Btn>
       {rosterDirty&&<Btn variant="ghost" onClick={discardRoster}>← 変更を元に戻す</Btn>}
     </div>}
@@ -1460,7 +1460,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
     </div>}
 
     {modal&&<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
-      <div style={{background:"#0a1c3a",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:24,width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.5)"}}>
+      <div style={{background:"#1a2e58",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:24,width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.5)"}}>
         <p style={{color:"#fff",marginBottom:24,fontSize:15,fontWeight:700,whiteSpace:"pre-wrap",lineHeight:1.6}}>{modal.m}</p>
         <div style={{display:"flex",gap:12}}>
           <Btn variant="ghost" onClick={modal.no} style={{flex:1}}>キャンセル</Btn>
@@ -1471,7 +1471,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
   </div>);
 }
 // ── LOTTERY ──
-const PATH_COLORS=["#60a5fa","#f59e0b","#3b82f6","#ec4899","#8b5cf6","#06b6d4","#f97316","#14b8a6","#93c5fd","#fb923c"];
+const PATH_COLORS=["#bae6fd","#f59e0b","#3b82f6","#ec4899","#8b5cf6","#06b6d4","#f97316","#14b8a6","#bae6fd","#fb923c"];
 function genRungs(n,rows){return Array.from({length:rows},()=>{const s=new Set();let c=0;while(c<n-1){if(Math.random()<0.42){s.add(c);c+=2}else c++}return s})}
 function buildPaths(n,rows,rungs,CW,RH,PX,PY){
   const cx=c=>PX+c*CW+CW/2;
