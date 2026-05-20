@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>🏆 駐車場抽選 PRO</title>
-  <meta name="description" content="ジュニアスポーツの駐車場・配車調整アプリ">
-  <meta property="og:title" content="🏆 駐車場抽選 PRO">
-  <meta property="og:description" content="ジュニアスポーツの試合時の駐車場・配車調整アプリ">
+  <title>⚽ 駐車場抽選</title>
+  <meta name="description" content="サッカーチームの駐車場抽選アプリ">
+  <meta property="og:title" content="⚽ 駐車場抽選">
+  <meta property="og:description" content="サッカーの試合時の駐車場抽選アプリ">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#071e07">
@@ -37,40 +37,10 @@
 const{useState,useEffect,useRef,useCallback}=React;
 
 // ── Firebase ──
-const FB_ROOT="https://soccer-parking-default-rtdb.asia-southeast1.firebasedatabase.app/pro";
-const GLOBAL_ADMIN_PASS="spadmin2026"; // 全体管理者パスワード（コードで変更可能）
-let TEAM_ID=null;
-(function initTeamId(){
-  const u=new URLSearchParams(window.location.search).get("team");
-  if(u){TEAM_ID=u;localStorage.setItem("parkingApp_teamId",u)}
-  else TEAM_ID=localStorage.getItem("parkingApp_teamId")||null;
-})();
-function getFB(){return TEAM_ID?`${FB_ROOT}/teams/${TEAM_ID}`:FB_ROOT}
-function setTeamId(id){TEAM_ID=id;if(id)localStorage.setItem("parkingApp_teamId",id);else localStorage.removeItem("parkingApp_teamId")}
-async function fbGet(p){try{const r=await fetch(`${getFB()}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbGet:",e);return undefined}}
-async function fbSet(p,v){try{await fetch(`${getFB()}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbSet:",e)}}
-async function fbDel(p){try{await fetch(`${getFB()}/${p}.json`,{method:"DELETE"})}catch(e){console.error("fbDel:",e)}}
-async function fbRootGet(p){try{const r=await fetch(`${FB_ROOT}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbRootGet:",e);return undefined}}
-async function fbRootSet(p,v){try{await fetch(`${FB_ROOT}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbRootSet:",e)}}
-async function checkTeamExists(id){const r=await fetch(`${FB_ROOT}/teams/${id}/meta.json`);if(!r.ok)return null;const d=await r.json();return d||null}
-async function createTeam(name){
-  const id=Math.random().toString(36).slice(2,8).toUpperCase();
-  await fbRootSet(`teams/${id}/meta`,{name:name.trim()||"無名チーム",createdAt:Date.now()});
-  return id;
-}
-async function migrateRootDataToTeam(teamId){
-  // One-time: if there's data at FB_ROOT (not under /teams/), copy to /teams/{teamId}/
-  const[ros,evs,resps,lotts]=await Promise.all([
-    fbRootGet("roster"),fbRootGet("events"),fbRootGet("responses"),fbRootGet("lotteries")
-  ]);
-  if(!ros&&!evs)return false;
-  await fbRootSet(`teams/${teamId}/meta`,{name:"既存チーム",createdAt:Date.now(),migrated:true});
-  if(ros)await fbRootSet(`teams/${teamId}/roster`,ros);
-  if(evs)await fbRootSet(`teams/${teamId}/events`,evs);
-  if(resps)await fbRootSet(`teams/${teamId}/responses`,resps);
-  if(lotts)await fbRootSet(`teams/${teamId}/lotteries`,lotts);
-  return true;
-}
+const FB="https://soccer-parking-default-rtdb.asia-southeast1.firebasedatabase.app";
+async function fbGet(p){try{const r=await fetch(`${FB}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbGet:",e);return undefined}}
+async function fbSet(p,v){try{await fetch(`${FB}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbSet:",e)}}
+async function fbDel(p){try{await fetch(`${FB}/${p}.json`,{method:"DELETE"})}catch(e){console.error("fbDel:",e)}}
 function uid(){return Math.random().toString(36).slice(2,9)}
 
 // ── Default ──
@@ -113,262 +83,6 @@ function getTimeLeft(dl){const d=new Date(dl)-new Date();if(d<=0)return null;con
 function getEventRoster(roster,ev){const g=ev.inviteGrades||[...new Set(roster.map(r=>r.grade||"4年"))];return roster.filter(r=>g.includes(r.grade||"4年"))}
 function getConfirmed(ev){return ev.confirmedParking||[]}
 function getLotterySlots(ev){return Math.max(0,(ev.parkingLimit||0)-getConfirmed(ev).length)}
-function getEventMode(ev){return ev?.mode||(ev?.carpoolEnabled?"carpool":"simple")}
-function getTeamSettings(meta){
-  const s=meta?.settings||{};
-  return{gasPrice:s.gasPrice??170,fuelEconomy:s.fuelEconomy??10,handlingFee:s.handlingFee??0,...s};
-}
-function computeDriverCost(ev,settings,numPassengers){
-  if(!ev||!ev.roundTripKm)return null;
-  const km=parseFloat(ev.roundTripKm)||0;
-  const toll=parseInt(ev.tollFee)||0;
-  const fe=parseFloat(settings.fuelEconomy)||10;
-  const gp=parseFloat(settings.gasPrice)||170;
-  const hf=parseInt(settings.handlingFee)||0;
-  const gas=Math.round(km/fe*gp);
-  const total=gas+toll+hf;
-  const perPassenger=numPassengers>0?Math.ceil(total/numPassengers/100)*100:null;
-  return{gas,toll,handlingFee:hf,total,perPassenger,numPassengers};
-}
-function computeCarpoolPlan(ev,resp){
-  const attendees=Object.entries(resp||{}).filter(([id,r])=>r&&r.attending);
-  const attendeeIds=attendees.map(([id])=>id);
-  const N=attendeeIds.length;
-  if(N===0)return null;
-  const confirmedSet=new Set(getConfirmed(ev||{}));
-  // Drivers = attendees with parkingNeeded=true (intent to bring car)
-  // Their "total people they can carry" = 1 (self) + carpoolCapacity
-  const drivers=attendees
-    .filter(([id,r])=>r.parkingNeeded)
-    .map(([id,r])=>({id,cap:r.carpoolCapacity||0,total:1+(r.carpoolCapacity||0),isConfirmed:confirmedSet.has(id)}))
-    .sort((a,b)=>{
-      // Confirmed first, then by capacity desc
-      if(a.isConfirmed!==b.isConfirmed)return a.isConfirmed?-1:1;
-      return b.total-a.total;
-    });
-  const parkingLimit=ev?.parkingLimit||0;
-  const selected=[];
-  let coveredCount=0;
-  for(const d of drivers){
-    if(selected.length>=parkingLimit)break;
-    if(coveredCount>=N&&!d.isConfirmed)break;
-    selected.push(d);
-    coveredCount+=d.total;
-  }
-  const driverIdSet=new Set(selected.map(d=>d.id));
-  const passengersToAssign=attendeeIds.filter(id=>!driverIdSet.has(id));
-  const assignments={};
-  selected.forEach(d=>{assignments[d.id]=[]});
-  const unassigned=[];
-  for(const pid of passengersToAssign){
-    let placed=false;
-    for(const d of selected){
-      if(assignments[d.id].length<d.cap){
-        assignments[d.id].push(pid);
-        placed=true;
-        break;
-      }
-    }
-    if(!placed)unassigned.push(pid);
-  }
-  return{selectedDrivers:selected.map(d=>({id:d.id,capacity:d.cap})),assignments,unassigned,coveredCount,attendeeCount:N};
-}
-function getDropouts(ev,resp,lott){
-  if(!lott?.conducted)return null;
-  const winners=lott.winners||[];
-  const dropouts=winners.filter(id=>{const r=resp[id];return !r||!r.attending||!r.parkingNeeded});
-  const effectiveWinners=winners.filter(id=>!dropouts.includes(id));
-  const openSlots=Math.max(0,getLotterySlots(ev)-effectiveWinners.length);
-  const allParticipants=lott.allParticipants||[];
-  const eligibleLosers=allParticipants.filter(id=>{
-    if(winners.includes(id))return false;
-    const r=resp[id];
-    return r&&r.attending&&r.parkingNeeded;
-  });
-  return{dropouts,effectiveWinners,openSlots,eligibleLosers};
-}
-function computeCarpoolMatching(ev,resp,lott){
-  if(getEventMode(ev)!=="carpool"||!lott?.conducted)return null;
-  const confirmed=getConfirmed(ev);
-  const winners=lott.winners||[];
-  const drivers=[...confirmed,...winners].map(id=>{
-    const r=resp[id];
-    if(!r||!r.attending)return null;
-    if(!r.carpoolCapacity||r.carpoolCapacity<=0)return null;
-    return{id,meetingPoint:(r.meetingPoint||"").trim(),capacity:r.carpoolCapacity};
-  }).filter(d=>d&&d.meetingPoint);
-  const allParts=lott.allParticipants||[];
-  const losers=allParts.filter(id=>!winners.includes(id)&&!confirmed.includes(id)).filter(id=>{const r=resp[id];return r&&r.attending&&r.parkingNeeded});
-  const points={};
-  drivers.forEach(d=>{
-    if(!points[d.meetingPoint])points[d.meetingPoint]={drivers:[],riders:[],totalCapacity:0};
-    points[d.meetingPoint].drivers.push(d);
-    points[d.meetingPoint].totalCapacity+=d.capacity;
-  });
-  losers.forEach(id=>{
-    const r=resp[id];
-    const wishes=(r.carpoolWishes||[]).filter(Boolean);
-    wishes.forEach(w=>{
-      const key=w.trim();
-      if(points[key]){points[key].riders.push({id,wishes})}
-    });
-  });
-  const assignments=(lott.carpoolAssignments)||{};
-  const result=[];
-  Object.entries(points).forEach(([mp,data])=>{
-    if(data.riders.length===0)return;
-    const uniqueRiders=[...new Map(data.riders.map(r=>[r.id,r])).values()];
-    const overflow=uniqueRiders.length>data.totalCapacity;
-    let assigned=assignments[mp]||null;
-    if(!overflow&&!assigned){assigned=uniqueRiders.map(r=>r.id)}
-    result.push({meetingPoint:mp,drivers:data.drivers,totalCapacity:data.totalCapacity,riders:uniqueRiders,overflow,assigned});
-  });
-  const unmatched=losers.filter(id=>{
-    const r=resp[id];
-    const wishes=(r.carpoolWishes||[]).filter(Boolean);
-    if(wishes.length===0)return false;
-    return !wishes.some(w=>{const k=w.trim();return points[k]&&points[k].drivers.length>0});
-  });
-  return{points:result,unmatched,drivers,losers};
-}
-function mapUrl(loc){return loc?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}`:""}
-function parkingUrl(loc){return loc?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc+" コインパーキング")}`:""}
-function pad2(n){return n<10?"0"+n:""+n}
-function applyTime(date,timeStr){
-  const d=new Date(date);
-  if(timeStr){const[h,m]=timeStr.split(":");d.setHours(parseInt(h)||0,parseInt(m)||0,0,0)}
-  return d;
-}
-function fmtICSLocal(d){return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}00`}
-function genICS(ev){
-  if(!ev.matchDate)return null;
-  const startTime=ev.meetTime||ev.kickoffTime;
-  const start=applyTime(ev.matchDate,startTime);
-  let end;
-  if(ev.endTime){end=applyTime(ev.matchDate,ev.endTime)}
-  else{end=new Date(start);end.setHours(end.getHours()+2)}
-  const summary=ev.opponent?`🏆 ${ev.title} vs ${ev.opponent}`:`🏆 ${ev.title}`;
-  const descLines=[];
-  if(ev.opponent)descLines.push(`対戦相手: ${ev.opponent}`);
-  if(ev.meetTime)descLines.push(`集合: ${ev.meetTime}`);
-  if(ev.kickoffTime)descLines.push(`KO: ${ev.kickoffTime}`);
-  if(ev.endTime)descLines.push(`終了予定: ${ev.endTime}`);
-  if(ev.uniformColor)descLines.push(`ユニフォーム: ${ev.uniformColor}`);
-  if(ev.notes)descLines.push(`備考: ${ev.notes}`);
-  if(ev.location)descLines.push(`地図: ${mapUrl(ev.location)}`);
-  const esc=(s)=>String(s).replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/,/g,"\\,").replace(/;/g,"\\;");
-  const now=new Date();
-  const dtstamp=`${now.getUTCFullYear()}${pad2(now.getUTCMonth()+1)}${pad2(now.getUTCDate())}T${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}${pad2(now.getUTCSeconds())}Z`;
-  const lines=[
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Soccer Parking//Match//JA",
-    "CALSCALE:GREGORIAN",
-    "BEGIN:VEVENT",
-    `UID:${ev.id||"event"}@soccer-parking`,
-    `DTSTAMP:${dtstamp}`,
-    `DTSTART:${fmtICSLocal(start)}`,
-    `DTEND:${fmtICSLocal(end)}`,
-    `SUMMARY:${esc(summary)}`,
-    ev.location?`LOCATION:${esc(ev.location)}`:null,
-    descLines.length?`DESCRIPTION:${esc(descLines.join("\n"))}`:null,
-    "END:VEVENT",
-    "END:VCALENDAR"
-  ].filter(Boolean);
-  return lines.join("\r\n");
-}
-function downloadICS(ev){
-  const ics=genICS(ev);
-  if(!ics){alert("試合日時を設定してからカレンダー追加できます");return}
-  const blob=new Blob([ics],{type:"text/calendar;charset=utf-8"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url;
-  a.download=(ev.title||"event").replace(/[^\w぀-ヿ一-龯-]/g,"_")+".ics";
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
-function parseLineMessage(text){
-  if(!text)return{};
-  const result={};
-  const t=text.replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
-    .replace(/[：]/g,":").replace(/[／]/g,"/");
-  // 日付: M/D, M月D日 など
-  let dateMatch=t.match(/(\d{1,2})\s*[\/月\.\-]\s*(\d{1,2})(?:日)?/);
-  let parsedDate=null;
-  if(dateMatch){
-    const m=parseInt(dateMatch[1]),d=parseInt(dateMatch[2]);
-    const now=new Date();
-    let y=now.getFullYear();
-    const candidate=new Date(y,m-1,d);
-    if(candidate<new Date(now.getTime()-86400000))y++;
-    parsedDate={y,m,d};
-  }
-  // 対戦相手
-  const vsMatch=t.match(/(?:vs\.?\s+|VS\.?\s+|対戦相手\s*:?\s*|相手\s*:?\s*|対\s+)([^\s\n,、。\(（]+(?:\s+(?:FC|fc|サッカー|SC|サッカークラブ))?)/);
-  if(vsMatch)result.opponent=vsMatch[1].trim();
-  // 会場
-  const locMatch=t.match(/(?:会場\s*:?\s*|場所\s*:?\s*|@\s*)([^\n\(（,、]+?)(?=\s*(?:集合|キックオフ|KO|ko|ユニ|終了|解散|$|\n|時|分))/);
-  if(locMatch){
-    let loc=locMatch[1].trim();
-    loc=loc.replace(/[「『【［\[]/g,"").replace(/[」』】］\]]/g,"");
-    if(loc.length>0&&loc.length<60)result.location=loc;
-  }
-  // 集合時刻
-  const meetMatch=t.match(/集合(?:は|が)?\s*[:\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?/);
-  if(meetMatch){
-    const h=parseInt(meetMatch[1]),m=parseInt(meetMatch[2]||"0");
-    result.meetTime=`${pad2(h)}:${pad2(m)}`;
-  }
-  // キックオフ（KO先 or 時刻先 両対応）
-  let koMatch=t.match(/(?:KO|ko|キックオフ|試合開始)\s*[:\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?/);
-  if(!koMatch)koMatch=t.match(/(\d{1,2})\s*[:時]\s*(\d{0,2})\s*(?:KO|ko|キックオフ|試合開始)/);
-  if(koMatch){
-    const h=parseInt(koMatch[1]),m=parseInt(koMatch[2]||"0");
-    result.kickoffTime=`${pad2(h)}:${pad2(m)}`;
-  }
-  // 終了予定
-  const endMatch=t.match(/(?:終了|解散|終わり)\s*予?定?\s*[:\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?/);
-  if(endMatch){
-    const h=parseInt(endMatch[1]),m=parseInt(endMatch[2]||"0");
-    result.endTime=`${pad2(h)}:${pad2(m)}`;
-  }
-  // ユニフォーム (color before ユニ first, then ユニ: pattern)
-  let uniMatch=t.match(/([白黒紺青赤緑黄橙桃])(?:ユニ|シャツ|の?ユニフォーム)/);
-  if(!uniMatch)uniMatch=t.match(/ユニ(?:フォーム)?\s*[:：\s]+([白黒紺青赤緑黄橙桃ピンクオレンジ]+|\S+)/);
-  if(uniMatch){
-    const v=uniMatch[1].trim();
-    if(!["で","に","の","は","を","は","と"].includes(v))result.uniformColor=v;
-  }
-  // matchDate (combine with kickoff or meetTime or default 09:00)
-  if(parsedDate){
-    const tm=result.kickoffTime||result.meetTime||"09:00";
-    result.matchDate=`${parsedDate.y}-${pad2(parsedDate.m)}-${pad2(parsedDate.d)}T${tm}`;
-  }
-  return result;
-}
-function fmtMatchDetails(ev){
-  const lines=[];
-  if(ev.opponent)lines.push(`🆚 ${ev.opponent}`);
-  if(ev.location){
-    lines.push(`📍 ${ev.location}`);
-    lines.push(`🗺 ${mapUrl(ev.location)}`);
-  }
-  if(ev.meetTime||ev.kickoffTime||ev.endTime){
-    const parts=[];
-    if(ev.meetTime)parts.push(`集合${ev.meetTime}`);
-    if(ev.kickoffTime)parts.push(`KO${ev.kickoffTime}`);
-    if(ev.endTime)parts.push(`終了${ev.endTime}`);
-    lines.push(`⏰ ${parts.join(" / ")}`);
-  }
-  if(ev.uniformColor)lines.push(`👕 ${ev.uniformColor}`);
-  if(ev.notes)lines.push(`📝 ${ev.notes}`);
-  if(ev.attachments&&ev.attachments.length){
-    lines.push(`📎 資料:`);
-    ev.attachments.forEach(a=>lines.push(`  ${a.name||"リンク"}: ${a.url}`));
-  }
-  return lines.length?lines.join("\n"):"";
-}
 
 // ── Components ──
 function Btn({children,onClick,variant="primary",disabled,style:ex}){
@@ -387,247 +101,16 @@ function BackBar({title,onBack,label="← 戻る"}){
     <div style={{flex:1,textAlign:"center",fontWeight:900,fontSize:16,color:"#fff",paddingRight:16}}>{title}</div>
   </div>);
 }
-function Accordion({title,open,onToggle,accent,badge,children}){
-  const borderColor=accent||"rgba(255,255,255,0.12)";
-  return(<div style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${borderColor}`,borderRadius:16,marginBottom:12,overflow:"hidden"}}>
-    <button onClick={onToggle} style={{background:"none",border:"none",color:"#fff",fontFamily:"inherit",width:"100%",textAlign:"left",cursor:"pointer",padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,fontWeight:900,fontSize:14}}>{title}{badge}</div>
-      <div style={{fontSize:14,color:"rgba(255,255,255,0.5)"}}>{open?"▲":"▼"}</div>
-    </button>
-    {open&&<div style={{padding:"0 16px 16px"}} className="fade-in">{children}</div>}
-  </div>);
-}
-
-// ── LANDING ──
-function LandingScreen({onCreate,onJoin,onPrivacy,onTerms,onGlobalAdmin,maintenanceNotice}){
-  const[mode,setMode]=useState("");
-  const[teamName,setTeamName]=useState("");
-  const[joinCode,setJoinCode]=useState("");
-  const[err,setErr]=useState("");
-  const[busy,setBusy]=useState(false);
-  async function doCreate(){
-    if(!teamName.trim()){setErr("チーム名を入力してください");return}
-    setErr("");setBusy(true);
-    try{const id=await onCreate(teamName);}catch(e){setErr(e.message||"作成に失敗しました")}
-    setBusy(false);
-  }
-  async function doJoin(){
-    setErr("");setBusy(true);
-    try{await onJoin(joinCode)}catch(e){setErr(e.message||"参加に失敗しました")}
-    setBusy(false);
-  }
-  return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 16px"}}>
-    <div style={{textAlign:"center",marginBottom:32}}>
-      <div style={{fontSize:64,marginBottom:12,animation:"spFloat 3s ease-in-out infinite"}}>🏆</div>
-      <h1 style={{fontSize:28,fontWeight:900,margin:0}}>駐車場 抽選</h1>
-      <p style={{color:C.limeLight,fontWeight:700,marginTop:6,fontSize:13}}>Sports Parking Lottery</p>
-      <p style={{color:C.muted,marginTop:16,fontSize:13,lineHeight:1.6,maxWidth:340}}>ジュニアスポーツチームの<br/>駐車場・配車調整アプリ</p>
-    </div>
-    {!mode&&<div style={{width:"100%",maxWidth:340}}>
-      <Btn onClick={()=>setMode("create")} style={{marginBottom:12}}>＋ 新規チームを作成</Btn>
-      <Btn variant="ghost" onClick={()=>setMode("join")}>🔑 チームコードで参加</Btn>
-    </div>}
-    {mode==="create"&&<div style={{width:"100%",maxWidth:340}}>
-      <div style={S.card}>
-        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>チーム名</div>
-        <input value={teamName} onChange={e=>setTeamName(e.target.value)} placeholder="例：港北FC U-12" style={S.input} autoComplete="off" autoFocus/>
-      </div>
-      <ErrMsg msg={err}/>
-      <Btn onClick={doCreate} disabled={busy} style={{marginBottom:8}}>{busy?"作成中...":"作成する →"}</Btn>
-      <Btn variant="ghost" onClick={()=>{setMode("");setErr("")}}>← 戻る</Btn>
-    </div>}
-    {mode==="join"&&<div style={{width:"100%",maxWidth:340}}>
-      <div style={S.card}>
-        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>チームコード</div>
-        <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} placeholder="例：A3X9PQ" style={{...S.input,letterSpacing:2,textAlign:"center",fontSize:16,fontWeight:700}} autoComplete="off" autoFocus/>
-        <p style={{fontSize:11,color:C.dim,marginTop:8,lineHeight:1.5}}>チーム管理者から共有されたコードを入力してください</p>
-      </div>
-      <ErrMsg msg={err}/>
-      <Btn onClick={doJoin} disabled={busy||!joinCode.trim()} style={{marginBottom:8}}>{busy?"参加中...":"参加する →"}</Btn>
-      <Btn variant="ghost" onClick={()=>{setMode("");setErr("");setJoinCode("")}}>← 戻る</Btn>
-    </div>}
-    {maintenanceNotice&&<MaintenanceBanner notice={maintenanceNotice} style={{marginTop:16,maxWidth:340,width:"100%"}}/>}
-    <div style={{marginTop:32,fontSize:11,color:C.dim,display:"flex",gap:16,flexWrap:"wrap",justifyContent:"center"}}>
-      <button onClick={onPrivacy} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:11,fontFamily:"inherit",textDecoration:"underline"}}>プライバシーポリシー</button>
-      <button onClick={onTerms} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:11,fontFamily:"inherit",textDecoration:"underline"}}>利用規約</button>
-      <button onClick={onGlobalAdmin} style={{background:"none",border:"none",color:C.faint,cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>🔧</button>
-    </div>
-  </div>);
-}
-function MaintenanceBanner({notice,style}){
-  if(!notice||!notice.message)return null;
-  const colors={info:{bg:"rgba(56,189,248,0.12)",border:"#38bdf8",text:"#38bdf8"},warning:{bg:"rgba(245,158,11,0.12)",border:"#f59e0b",text:"#f59e0b"},critical:{bg:"rgba(239,68,68,0.12)",border:"#ef4444",text:"#f87171"}};
-  const c=colors[notice.level||"info"]||colors.info;
-  return(<div style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:12,padding:"10px 14px",fontSize:12,color:c.text,whiteSpace:"pre-wrap",lineHeight:1.5,...style}}>
-    📢 {notice.message}
-  </div>);
-}
-
-// ── GLOBAL ADMIN ──
-function GlobalAdminLogin({onLogin,onBack}){
-  const[pwd,setPwd]=useState("");
-  const[err,setErr]=useState("");
-  function tryLogin(){
-    if(pwd===GLOBAL_ADMIN_PASS){sessionStorage.setItem("global_admin","1");setErr("");onLogin()}
-    else{setErr("⚠️ パスワードが違います")}
-  }
-  return(<div style={{padding:"24px 16px",maxWidth:420,margin:"60px auto 0"}}>
-    <div style={{textAlign:"center",marginBottom:24}}>
-      <div style={{fontSize:48,marginBottom:8}}>🔐</div>
-      <h2 style={{fontSize:20,fontWeight:900,margin:0}}>全体管理者ログイン</h2>
-    </div>
-    <div style={S.card}>
-      <div style={{fontSize:12,color:C.dim,marginBottom:6}}>パスワード</div>
-      <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryLogin()} placeholder="••••••••" style={{...S.input,letterSpacing:2}} autoFocus/>
-    </div>
-    <ErrMsg msg={err}/>
-    <Btn onClick={tryLogin} style={{marginBottom:8}}>🔓 ログイン</Btn>
-    <Btn variant="ghost" onClick={onBack}>← 戻る</Btn>
-  </div>);
-}
-function GlobalAdminDashboard({onBack,onLogout}){
-  const[teams,setTeams]=useState(null);
-  const[notice,setNotice]=useState(null);
-  const[noticeDraft,setNoticeDraft]=useState({message:"",level:"info"});
-  const[flash,setFlash]=useState("");
-  const[newName,setNewName]=useState("");
-  useEffect(()=>{
-    fbRootGet("teams").then(t=>setTeams(t||{}));
-    fbRootGet("maintenance").then(n=>{setNotice(n);if(n)setNoticeDraft({message:n.message||"",level:n.level||"info"})});
-  },[]);
-  async function deleteTeam(id){
-    if(!confirm(`チーム ${id} を完全削除しますか？\nこの操作は取り消せません。`))return;
-    await fbRootSet(`teams/${id}`,null);
-    setTeams(t=>{const n={...t};delete n[id];return n});
-    setFlash(`✅ チーム ${id} を削除しました`);setTimeout(()=>setFlash(""),3000);
-  }
-  async function postNotice(){
-    const n={message:noticeDraft.message.trim(),level:noticeDraft.level,postedAt:Date.now()};
-    if(!n.message){await fbRootSet("maintenance",null);setNotice(null);setFlash("✅ 告知を削除しました")}
-    else{await fbRootSet("maintenance",n);setNotice(n);setFlash("✅ 告知を公開しました")}
-    setTimeout(()=>setFlash(""),3000);
-  }
-  async function createNew(){
-    if(!newName.trim()){setFlash("⚠️ チーム名を入力してください");setTimeout(()=>setFlash(""),3000);return}
-    const id=await createTeam(newName);
-    setTeams(t=>({...t,[id]:{name:newName.trim(),createdAt:Date.now()}}));
-    setNewName("");
-    setFlash(`✅ チーム作成: ${id}`);setTimeout(()=>setFlash(""),5000);
-  }
-  function logout(){sessionStorage.removeItem("global_admin");onLogout()}
-  const teamList=teams?Object.entries(teams):[];
-  return(<div style={{padding:"24px 16px",maxWidth:520,margin:"0 auto"}}>
-    <BackBar title="🔐 全体管理者" onBack={onBack} label="← 戻る"/>
-    <FlashMsg msg={flash}/>
-    <div style={S.card}>
-      <div style={{fontSize:13,fontWeight:900,marginBottom:10}}>📢 メンテナンス告知</div>
-      <p style={{fontSize:11,color:C.dim,marginBottom:8}}>全ユーザーのトップ画面に表示されます。空欄保存で告知を削除</p>
-      <textarea value={noticeDraft.message} onChange={e=>setNoticeDraft(d=>({...d,message:e.target.value}))} placeholder="例：12/25 02:00〜04:00 メンテナンス予定" rows={3} style={{...S.input,resize:"vertical",minHeight:70,marginBottom:8,fontFamily:"inherit"}}/>
-      <select value={noticeDraft.level} onChange={e=>setNoticeDraft(d=>({...d,level:e.target.value}))} style={{...S.select,marginBottom:8}}>
-        <option value="info">情報（青）</option>
-        <option value="warning">警告（黄）</option>
-        <option value="critical">重要（赤）</option>
-      </select>
-      <Btn onClick={postNotice}>{noticeDraft.message.trim()?"📢 告知を公開":"🗑 告知を削除"}</Btn>
-      {notice&&<div style={{fontSize:11,color:C.dim,marginTop:8}}>現在の告知: {new Date(notice.postedAt).toLocaleString("ja-JP")}</div>}
-    </div>
-
-    <div style={S.card}>
-      <div style={{fontSize:13,fontWeight:900,marginBottom:10}}>➕ 新規チーム作成</div>
-      <div style={{display:"flex",gap:8}}>
-        <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="チーム名" style={{...S.input,flex:1}}/>
-        <button onClick={createNew} style={{...S.btnSm,background:C.lime,color:"#052e16",padding:"10px 16px"}}>作成</button>
-      </div>
-    </div>
-
-    <div style={S.card}>
-      <div style={{fontSize:13,fontWeight:900,marginBottom:10}}>📋 全チーム一覧（{teamList.length}件）</div>
-      {teams===null?<p style={{color:C.dim,fontSize:13}}>読み込み中...</p>
-        :teamList.length===0?<p style={{color:C.dim,fontSize:13}}>チームがありません</p>
-        :teamList.sort((a,b)=>(b[1]?.createdAt||0)-(a[1]?.createdAt||0)).map(([id,meta])=><div key={id} style={{background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"10px 12px",marginBottom:6}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:13,fontWeight:700}}>{meta?.name||"無名チーム"}</div>
-              <div style={{fontSize:11,color:C.dim,marginTop:2}}>コード: <span style={{color:C.limeLight,fontWeight:700}}>{id}</span></div>
-              {meta?.createdAt&&<div style={{fontSize:10,color:C.faint,marginTop:2}}>作成: {new Date(meta.createdAt).toLocaleDateString("ja-JP")}</div>}
-            </div>
-            <button onClick={()=>deleteTeam(id)} style={{background:"rgba(239,68,68,0.2)",border:"none",color:"#f87171",borderRadius:8,padding:"6px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>削除</button>
-          </div>
-        </div>)}
-    </div>
-
-    <Btn variant="ghost" onClick={logout}>🔒 ログアウト</Btn>
-  </div>);
-}
-
-// ── PRIVACY / TERMS ──
-function LegalScreen({type,onBack}){
-  const isPrivacy=type==="privacy";
-  return(<div style={{padding:"24px 16px",maxWidth:560,margin:"0 auto"}}>
-    <BackBar title={isPrivacy?"プライバシーポリシー":"利用規約"} onBack={onBack} label="← 戻る"/>
-    <div style={{...S.card,lineHeight:1.8,fontSize:13,whiteSpace:"pre-wrap"}}>
-      {isPrivacy?
-`本アプリ「🏆 駐車場抽選」は、ジュニアスポーツチームの保護者間で駐車場や乗合を調整するためのツールです。
-
-【収集する情報】
-・選手の名前、背番号、学年
-・試合への出欠回答
-・駐車場の希望、乗合可能人数
-・集合場所（任意）
-・添付ファイルのURL（任意）
-
-【データの保管】
-・データは Google Firebase Realtime Database に保管されます
-・データはチームコードごとに完全に分離されています
-・チームコードを知らない第三者はアクセスできません
-
-【共有】
-・第三者にデータを販売・共有することはありません
-・チームコードを共有された保護者間でのみ閲覧・編集が可能です
-
-【削除】
-・不要になったデータは管理者が削除できます
-・お問い合わせは管理者経由で本アプリ提供者へご連絡ください
-
-最終更新: 2026年5月`
-:
-`【サービス内容】
-本アプリは、ジュニアスポーツチームの駐車場・配車調整を支援する無料サービスです。
-
-【利用条件】
-・本アプリはチーム単位で利用されます
-・チームコードを知る保護者間で共同利用してください
-
-【免責事項】
-・データの正確性、可用性について保証しません
-・抽選結果や配車マッチング結果の運用責任はチーム管理者にあります
-・本アプリの利用により生じたいかなる損害についても提供者は責任を負いません
-
-【禁止事項】
-・他チームのデータへの不正アクセス試行
-・データ改ざん、削除を目的とした不正利用
-・本アプリの仕組みを悪用した行為
-
-【サービスの変更・終了】
-・予告なく仕様変更・サービス終了する場合があります
-
-最終更新: 2026年5月`}
-    </div>
-  </div>);
-}
 
 // ── HOME ──
-function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent,loading,teamMeta,maintenanceNotice}){
+function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent,loading}){
   const[,tick]=useState(0);
   useEffect(()=>{const t=setInterval(()=>tick(x=>x+1),30000);return()=>clearInterval(t)},[]);
   const now=new Date();
-  const sortedAsc=[...events].sort((a,b)=>new Date(a.matchDate||"2099-12-31")-new Date(b.matchDate||"2099-12-31"));
-  const future=sortedAsc.filter(e=>!e.matchDate||new Date(e.matchDate)>=new Date(now-86400000));
-  const featured=future[0]||null;
-  const upcomingOthers=future.slice(1);
-  const archive=[...events].filter(e=>e.matchDate&&new Date(e.matchDate)<new Date(now-86400000)).sort((a,b)=>new Date(b.matchDate)-new Date(a.matchDate));
+  const sorted=[...events].sort((a,b)=>new Date(b.matchDate||0)-new Date(a.matchDate||0));
+  const recent=sorted.filter(e=>!e.matchDate||new Date(e.matchDate)>=new Date(now-3*86400000));
+  const archive=sorted.filter(e=>e.matchDate&&new Date(e.matchDate)<new Date(now-3*86400000));
   const[showArchive,setShowArchive]=useState(false);
-  const[showUpcoming,setShowUpcoming]=useState(false);
 
   function renderEvent(ev){
     const er=getEventRoster(roster,ev);
@@ -652,12 +135,6 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
             {ev.matchDate&&<div style={{color:C.limeLight,fontSize:12,fontWeight:700,marginTop:2}}>🗓 {fmtDate(ev.matchDate)}</div>}
           </div>{badge}
         </div>
-        {(ev.opponent||ev.location||ev.meetTime||ev.kickoffTime||ev.endTime||ev.uniformColor)&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8,fontSize:12,color:C.muted}}>
-          {ev.opponent&&<span>🆚 {ev.opponent}</span>}
-          {ev.location&&<span>📍 {ev.location}</span>}
-          {(ev.meetTime||ev.kickoffTime||ev.endTime)&&<span>⏰ {[ev.meetTime&&`集合${ev.meetTime}`,ev.kickoffTime&&`KO${ev.kickoffTime}`,ev.endTime&&`終了${ev.endTime}`].filter(Boolean).join(" / ")}</span>}
-          {ev.uniformColor&&<span>👕 {ev.uniformColor}</span>}
-        </div>}
         <div style={{display:"flex",gap:8,marginBottom:8}}>
           <div style={S.stat}><div style={{fontSize:18,fontWeight:900}}>{answered}<span style={{fontSize:11,color:C.dim}}>/{er.length}名</span></div><div style={{fontSize:11,color:C.muted}}>回答済み</div></div>
           <div style={S.stat}><div style={{fontSize:18,fontWeight:900,color:C.amber}}>{hopefuls}</div><div style={{fontSize:11,color:C.muted}}>駐車場希望</div></div>
@@ -671,31 +148,17 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
 
   return(<div>
     <div style={{textAlign:"center",padding:"28px 0 20px"}}>
-      <div style={{fontSize:52,marginBottom:10,display:"inline-block",animation:"spFloat 3s ease-in-out infinite"}}>🏆</div>
+      <div style={{fontSize:52,marginBottom:10,display:"inline-block",animation:"spFloat 3s ease-in-out infinite"}}>⚽</div>
       <h1 style={{fontSize:26,fontWeight:900,margin:0}}>駐車場 抽選</h1>
-      {teamMeta?.name?<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:14}}>🏆 {teamMeta.name}</p>:<p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:13}}>Sports Parking Lottery</p>}
+      <p style={{color:C.limeLight,fontWeight:700,marginTop:4,fontSize:13}}>Soccer Parking Lottery</p>
     </div>
-    {maintenanceNotice&&<MaintenanceBanner notice={maintenanceNotice} style={{marginBottom:16}}/>}
     {loading?<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>読み込み中...</div>
-    :!featured&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
+    :recent.length===0&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
       <div style={{fontSize:40,marginBottom:12}}>📅</div>
       <p style={{color:C.muted,marginBottom:6}}>試合がまだ登録されていません</p>
       <p style={{color:C.dim,fontSize:12}}>管理者が試合を追加するまでお待ちください</p>
     </div>
-    :<>
-      {featured&&<>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:4}}>
-          <span style={{fontSize:18}}>🌟</span>
-          <span style={{fontSize:13,fontWeight:900,color:C.limeLight}}>次の試合</span>
-        </div>
-        {renderEvent(featured)}
-      </>}
-      {upcomingOthers.length>0&&<div style={{marginTop:16}}>
-        <button onClick={()=>setShowUpcoming(!showUpcoming)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 24px",color:"rgba(255,255,255,0.55)",fontSize:13,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
-          📅 今後の試合 ({upcomingOthers.length}件) {showUpcoming?"▲":"▼"}
-        </button>
-        {showUpcoming&&<div style={{marginTop:8}}>{upcomingOthers.map(renderEvent)}</div>}
-      </div>}
+    :<>{recent.map(renderEvent)}
       {archive.length>0&&<div style={{marginTop:16}}>
         <button onClick={()=>setShowArchive(!showArchive)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 24px",color:"rgba(255,255,255,0.35)",fontSize:13,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
           📦 過去の試合 ({archive.length}件) {showArchive?"▲":"▼"}
@@ -709,38 +172,24 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
   </div>);
 }
 // ── EVENT SCREEN ──
-function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCarpoolAmida,onSaveCarpool,onOptimizeCarpool,teamMeta}){
+function EventScreen({event,roster,responses,lottery,meetingPoints,selCarpoolSetup,carpoolRequests,setCarpoolRequests,carpoolMatching,onBack,onSubmit,onNav,onSaveCarpoolRequest,onCancelCarpoolRequest,onSaveDriverSetup,onAddMeetingPoint}){
   const er=getEventRoster(roster,event||{});
   const myKey="parkingApp_myId";
   const[memberId,setMemberId]=useState(()=>localStorage.getItem(myKey)||"");
   const[attending,setAttending]=useState(null);
   const[parking,setParking]=useState(null);
   const[carpool,setCarpool]=useState(0);
-  const[meetingPoint,setMeetingPoint]=useState("");
-  const[wish1,setWish1]=useState("");
-  const[wish2,setWish2]=useState("");
-  const[driverMpInput,setDriverMpInput]=useState("");
-  const[loserWishes,setLoserWishes]=useState([]);
-  const[savingCarpool,setSavingCarpool]=useState(false);
   const[err,setErr]=useState("");
   const[saving,setSaving]=useState(false);
   const[done,setDone]=useState(false);
   const[editing,setEditing]=useState(false);
-  const[sectionOpen,setSectionOpen]=useState({yokou:true,parking:true,carpool:true});
-  function toggleSection(k){setSectionOpen(s=>({...s,[k]:!s[k]}))}
 
   useEffect(()=>{
     const saved=localStorage.getItem(myKey);
     if(saved&&er.find(r=>r.id===saved)){
       setMemberId(saved);
       const prev=responses[saved];
-      if(prev){
-        setAttending(prev.attending);setParking(prev.parkingNeeded||false);setCarpool(prev.carpoolCapacity||0);
-        setMeetingPoint(prev.meetingPoint||"");
-        setWish1(prev.carpoolWishes?.[0]||"");setWish2(prev.carpoolWishes?.[1]||"");
-        setDriverMpInput(prev.meetingPoint||"");
-        setLoserWishes(prev.carpoolWishes||[]);
-      }
+      if(prev){setAttending(prev.attending);setParking(prev.parkingNeeded||false);setCarpool(prev.carpoolCapacity||0)}
     }
   },[event?.id]);
 
@@ -759,14 +208,8 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
 
   function selectMember(id){setMemberId(id);localStorage.setItem(myKey,id);
     const prev=responses[id];
-    if(prev){
-      setAttending(prev.attending);setParking(prev.parkingNeeded||false);setCarpool(prev.carpoolCapacity||0);
-      setMeetingPoint(prev.meetingPoint||"");
-      setWish1(prev.carpoolWishes?.[0]||"");setWish2(prev.carpoolWishes?.[1]||"");
-      setDriverMpInput(prev.meetingPoint||"");
-      setLoserWishes(prev.carpoolWishes||[]);
-    }
-    else{setAttending(null);setParking(null);setCarpool(0);setMeetingPoint("");setWish1("");setWish2("");setDriverMpInput("");setLoserWishes([])}
+    if(prev){setAttending(prev.attending);setParking(prev.parkingNeeded||false);setCarpool(prev.carpoolCapacity||0)}
+    else{setAttending(null);setParking(null);setCarpool(0)}
     setEditing(false);setDone(false);
   }
 
@@ -775,37 +218,14 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
     if(attending===null)return setErr("参加の有無を選んでください");
     if(attending&&!isConfirmed&&parking===null)return setErr("駐車場の希望を選んでください");
     setErr("");setSaving(true);
-    const parkingNeeded=attending?(isConfirmed?true:parking):false;
-    const cap=attending&&(isConfirmed||parking)?carpool:0;
-    const payload={memberId,attending,parkingNeeded,carpoolCapacity:cap};
-    await onSubmit(event.id,payload);
+    await onSubmit(event.id,{memberId,attending,parkingNeeded:attending?(isConfirmed?true:parking):false,carpoolCapacity:attending&&(isConfirmed||parking)?carpool:0});
     setSaving(false);setDone(true);setEditing(false);
-  }
-
-  async function saveDriverMeetingPoint(){
-    if(!driverMpInput.trim()){setErr("集合場所を入力してください");return}
-    setErr("");setSavingCarpool(true);
-    await onSaveCarpool(event.id,memberId,{meetingPoint:driverMpInput.trim()});
-    setSavingCarpool(false);
-  }
-  async function saveLoserWishes(){
-    setErr("");setSavingCarpool(true);
-    await onSaveCarpool(event.id,memberId,{carpoolWishes:loserWishes.slice(0,2)});
-    setSavingCarpool(false);
-  }
-  function toggleWish(mp){
-    setLoserWishes(prev=>{
-      if(prev.includes(mp))return prev.filter(x=>x!==mp);
-      if(prev.length>=2)return [prev[1],mp];
-      return [...prev,mp];
-    });
   }
 
   function copyReminder(){
     const names=unanswered.map(r=>`#${r.num} ${r.name}`).join(", ");
     const url=window.location.href.split('#')[0];
-    const details=fmtMatchDetails(event);
-    const txt=`📢 回答のお願い\n━━━━━━━━━━━━\n📌 ${event.title}\n🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}${details?"\n"+details:""}\n⏰ 締切: ${event.deadline?fmtDateTime(event.deadline):"未設定"}\n━━━━━━━━━━━━\n📭 【未回答の方】\n ${names}\n━━━━━━━━━━━━\n👇 回答はこちらから\n${url}`;
+    const txt=`📢 回答のお願い\n━━━━━━━━━━━━\n📌 ${event.title}\n🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}\n⏰ 締切: ${event.deadline?fmtDateTime(event.deadline):"未設定"}\n━━━━━━━━━━━━\n📭 【未回答の方】\n ${names}\n━━━━━━━━━━━━\n👇 回答はこちらから\n${url}`;
     if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
     else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
       const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！LINEに貼り付けてください");
@@ -813,45 +233,9 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
   }
 
   const showForm=!myResp||editing;
-  const hasYokou=!!(event.opponent||event.location||event.meetTime||event.kickoffTime||event.endTime||event.uniformColor||event.notes||(event.attachments&&event.attachments.length));
 
   return(<div>
     <BackBar title={event.title} onBack={onBack} label="← 一覧"/>
-
-    {hasYokou&&<Accordion title="📋 要項" open={sectionOpen.yokou} onToggle={()=>toggleSection("yokou")} accent="rgba(56,189,248,0.3)">
-      {event.opponent&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:C.dim,marginBottom:2}}>🆚 対戦相手</div>
-        <div style={{fontSize:15,fontWeight:700}}>{event.opponent}</div>
-      </div>}
-      {event.location&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:C.dim,marginBottom:2}}>📍 会場</div>
-        <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>{event.location}</div>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>window.open(mapUrl(event.location),"_blank","noopener,noreferrer")} style={{...S.btnSm,flex:1}}>🗺 会場の地図</button>
-          <button onClick={()=>window.open(parkingUrl(event.location),"_blank","noopener,noreferrer")} style={{...S.btnSm,flex:1}}>🅿️ 周辺の駐車場</button>
-        </div>
-      </div>}
-      {(event.meetTime||event.kickoffTime||event.endTime)&&<div style={{marginBottom:10,display:"flex",gap:16,flexWrap:"wrap"}}>
-        {event.meetTime&&<div><div style={{fontSize:11,color:C.dim}}>⏰ 集合</div><div style={{fontSize:15,fontWeight:700}}>{event.meetTime}</div></div>}
-        {event.kickoffTime&&<div><div style={{fontSize:11,color:C.dim}}>🏆 キックオフ</div><div style={{fontSize:15,fontWeight:700}}>{event.kickoffTime}</div></div>}
-        {event.endTime&&<div><div style={{fontSize:11,color:C.dim}}>🏁 終了予定</div><div style={{fontSize:15,fontWeight:700}}>{event.endTime}</div></div>}
-      </div>}
-      {event.uniformColor&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:C.dim,marginBottom:2}}>👕 ユニフォーム</div>
-        <div style={{fontSize:15,fontWeight:700}}>{event.uniformColor}</div>
-      </div>}
-      {event.notes&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:C.dim,marginBottom:2}}>📝 備考</div>
-        <div style={{fontSize:13,whiteSpace:"pre-wrap",lineHeight:1.5}}>{event.notes}</div>
-      </div>}
-      {event.attachments&&event.attachments.length>0&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:C.dim,marginBottom:6}}>📎 資料リンク</div>
-        {event.attachments.map(a=><a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" style={{display:"block",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"10px 12px",marginBottom:4,color:C.limeLight,fontSize:13,textDecoration:"none",fontWeight:700}}>🔗 {a.name||"リンク"}</a>)}
-      </div>}
-      {event.matchDate&&<button onClick={()=>downloadICS(event)} style={{...S.btnSm,width:"100%",padding:"10px 16px",marginTop:4}}>📅 カレンダーに追加</button>}
-    </Accordion>}
-
-    <Accordion title="🚗 駐車場" open={sectionOpen.parking} onToggle={()=>toggleSection("parking")} accent="rgba(132,204,22,0.3)" badge={lottery?.conducted?<Tag label="抽選済" color="lime"/>:null}>
     <div style={{display:"flex",gap:8,marginBottom:12}}>
       {[{n:answered,of:er.length,l:"回答済み",c:C.limeLight},{n:hopefuls.length,of:lottSlots,l:"駐車場希望",c:C.amber},{n:limit,of:null,l:"上限台数",c:C.sky}].map(({n,of,l,c})=>
         <div key={l} style={S.stat}><div style={{fontSize:20,fontWeight:900,color:c}}>{n}{of!=null&&<span style={{fontSize:11,color:C.dim}}>/{of}</span>}</div><div style={{fontSize:11,color:C.muted,lineHeight:1.3}}>{l}</div></div>
@@ -873,6 +257,70 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
 
     {lottery?.conducted&&<Btn variant="yellow" onClick={()=>onNav("results")} style={{marginBottom:12}}>🎉 抽選結果を見る</Btn>}
 
+    {/* Registration section */}
+    {!lottery?.conducted&&<div style={{...S.card,borderColor:"rgba(132,204,22,0.3)"}}>
+      <div style={{fontSize:14,fontWeight:900,color:C.limeLight,marginBottom:12}}>✏️ 参加登録{isPast?" (締切後)":""}</div>
+      {isPast&&<p style={{color:C.amber,fontSize:12,marginBottom:8}}>⚠️ 締切を過ぎていますが登録できます</p>}
+
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:12,color:C.muted,marginBottom:6}}>👦 選手を選んでください</div>
+        <select value={memberId} onChange={e=>selectMember(e.target.value)} style={S.select}>
+          <option value="">─ 選んでください ─</option>
+          {er.map(r=><option key={r.id} value={r.id}>#{r.num} {r.name} ({r.grade||"4年"}){responses[r.id]?" ✓":""}{confirmed.includes(r.id)?" 🔒":""}</option>)}
+        </select>
+      </div>
+
+      {memberId&&isConfirmed&&<div style={{...S.cardLock,margin:"0 0 12px"}}>
+        <p style={{color:C.sky,fontWeight:700,fontSize:14}}>🔒 駐車場確定枠です</p>
+        <p style={{color:C.dim,fontSize:12}}>抽選なしで駐車場を利用できます</p>
+      </div>}
+
+      {memberId&&myResp&&!editing&&<div style={{background:"rgba(132,204,22,0.08)",borderRadius:12,padding:12,marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:13}}>{myResp.attending?"✅ 参加":"❌ 欠席"}</div>
+            {myResp.attending&&<div style={{fontSize:13,marginTop:4}}>{myResp.parkingNeeded?`🚗 駐車場希望${myResp.carpoolCapacity>0?` (乗合+${myResp.carpoolCapacity})`:""}`:"🚶 駐車場不要"}</div>}
+          </div>
+          {!isPast?<button onClick={()=>setEditing(true)} style={S.btnSm}>内容を修正する</button>:<span style={{fontSize:11,color:C.amber}}>締切後のため修正不可</span>}
+        </div>
+        {done&&<p style={{color:C.limeLight,fontSize:12,marginTop:6}}>✅ 登録しました！</p>}
+      </div>}
+
+      {memberId&&showForm&&<>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>⚽ 試合に参加しますか？</div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setAttending(true)} style={S.choice(attending===true,"lime")}>✅ 参加する</button>
+            <button onClick={()=>{setAttending(false);setParking(false)}} style={S.choice(attending===false,"rose")}>❌ 欠席</button>
+          </div>
+        </div>
+        {attending===true&&<div style={{marginBottom:12}} className="fade-in">
+          {!isConfirmed ? (
+            <div>
+              <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🚗 駐車場を希望しますか？</div>
+              <div style={{display:"flex",gap:8,marginBottom:8}}>
+                <button onClick={()=>setParking(true)} style={S.choice(parking===true,"amber")}>🚗 希望する</button>
+                <button onClick={()=>{setParking(false);setCarpool(0)}} style={S.choice(parking===false,"lime")}>🚶 不要です</button>
+              </div>
+            </div>
+          ) : null}
+          {(parking===true||isConfirmed)&&<div style={{background:"rgba(255,255,255,0.05)",padding:12,borderRadius:12,marginTop:8}}>
+            <div style={{fontSize:12,color:C.dim,marginBottom:6}}>🚙 他の人を乗合できますか？</div>
+            <select value={carpool} onChange={e=>setCarpool(Number(e.target.value))} style={S.select}>
+              <option value={0}>乗合不可（自分の分のみ）</option>
+              {[1,2,3,4,5].map(n=><option key={n} value={n}>乗合可：{n}人まで</option>)}
+            </select>
+          </div>}
+          {!isConfirmed&&<p style={{fontSize:12,color:C.dim,textAlign:"center",marginTop:8}}>抽選枠 {lottSlots}台・超過時はあみだくじ</p>}
+        </div>}
+        <ErrMsg msg={err}/>
+        <Btn onClick={doSubmit} disabled={saving||!memberId||attending===null||(attending&&!isConfirmed&&parking===null)}>{saving?"送信中...":myResp?"変更を保存 →":"登録する →"}</Btn>
+        {editing&&<Btn variant="ghost" onClick={()=>setEditing(false)} style={{marginTop:8}}>キャンセル</Btn>}
+      </>}
+    </div>}
+
+    {/* (Removed carpool section based on user request) */}
+
     {!lottery?.conducted&&hopefuls.length>lottSlots&&lottSlots>0&&<div style={{...S.cardAmber,textAlign:"center",marginTop:8}}>
       <p style={{color:C.amber,fontWeight:700,marginBottom:4}}>⚠️ 抽選が必要です</p>
       <p style={{color:C.muted,fontSize:12,marginBottom:12}}>希望 {hopefuls.length}名 ＞ 抽選枠 {lottSlots}台</p>
@@ -884,62 +332,6 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       <p style={{color:C.dim,fontSize:12}}>希望 {hopefuls.length}名 ≤ {lottSlots}台</p>
     </div>}
 
-    {!lottery?.conducted&&<div style={{...S.card,borderColor:"rgba(132,204,22,0.3)"}}>
-      <div style={{fontSize:14,fontWeight:900,color:C.limeLight,marginBottom:12}}>✏️ 参加登録{isPast?" (締切後)":""}</div>
-      {isPast&&<p style={{color:C.amber,fontSize:12,marginBottom:8}}>⚠️ 締切を過ぎていますが登録できます</p>}
-      <div style={{marginBottom:12}}>
-        <div style={{fontSize:12,color:C.muted,marginBottom:6}}>👦 選手を選んでください</div>
-        <select value={memberId} onChange={e=>selectMember(e.target.value)} style={S.select}>
-          <option value="">─ 選んでください ─</option>
-          {er.map(r=><option key={r.id} value={r.id}>#{r.num} {r.name} ({r.grade||"4年"}){responses[r.id]?" ✓":""}{confirmed.includes(r.id)?" 🔒":""}</option>)}
-        </select>
-      </div>
-      {memberId&&isConfirmed&&<div style={{...S.cardLock,margin:"0 0 12px"}}>
-        <p style={{color:C.sky,fontWeight:700,fontSize:14}}>🔒 駐車場確定枠です</p>
-        <p style={{color:C.dim,fontSize:12}}>抽選なしで駐車場を利用できます</p>
-      </div>}
-      {memberId&&myResp&&!editing&&<div style={{background:"rgba(132,204,22,0.08)",borderRadius:12,padding:12,marginBottom:12}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div>
-            <div style={{fontSize:13}}>{myResp.attending?"✅ 参加":"❌ 欠席"}</div>
-            {myResp.attending&&<div style={{fontSize:13,marginTop:4}}>{myResp.parkingNeeded?`🚗 駐車場希望${myResp.carpoolCapacity>0?` (乗合+${myResp.carpoolCapacity})`:""}`:"🚶 駐車場不要"}</div>}
-          </div>
-          {!isPast?<button onClick={()=>setEditing(true)} style={S.btnSm}>内容を修正する</button>:<span style={{fontSize:11,color:C.amber}}>締切後のため修正不可</span>}
-        </div>
-        {done&&<p style={{color:C.limeLight,fontSize:12,marginTop:6}}>✅ 登録しました！</p>}
-      </div>}
-      {memberId&&showForm&&<>
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🏆 試合に参加しますか？</div>
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setAttending(true)} style={S.choice(attending===true,"lime")}>✅ 参加する</button>
-            <button onClick={()=>{setAttending(false);setParking(false)}} style={S.choice(attending===false,"rose")}>❌ 欠席</button>
-          </div>
-        </div>
-        {attending===true&&<div style={{marginBottom:12}} className="fade-in">
-          {!isConfirmed?<div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>🚗 駐車場を希望しますか？</div>
-            <div style={{display:"flex",gap:8,marginBottom:8}}>
-              <button onClick={()=>setParking(true)} style={S.choice(parking===true,"amber")}>🚗 希望する</button>
-              <button onClick={()=>{setParking(false);setCarpool(0)}} style={S.choice(parking===false,"lime")}>🚶 不要です</button>
-            </div>
-          </div>:null}
-          {(parking===true||isConfirmed)&&<div style={{background:"rgba(255,255,255,0.05)",padding:12,borderRadius:12,marginTop:8}}>
-            <div style={{fontSize:12,color:C.dim,marginBottom:6}}>🚙 他の人を乗合できますか？</div>
-            <select value={carpool} onChange={e=>setCarpool(Number(e.target.value))} style={S.select}>
-              <option value={0}>乗合不可（自分の分のみ）</option>
-              {[1,2,3,4,5].map(n=><option key={n} value={n}>乗合可：{n}人まで</option>)}
-            </select>
-            {getEventMode(event)==="carpool"&&carpool>0&&<p style={{fontSize:11,color:C.dim,marginTop:8,lineHeight:1.5}}>※ 集合場所は駐車場抽選後に登録できます</p>}
-          </div>}
-          {!isConfirmed&&<p style={{fontSize:12,color:C.dim,textAlign:"center",marginTop:8}}>抽選枠 {lottSlots}台・超過時はあみだくじ</p>}
-        </div>}
-        <ErrMsg msg={err}/>
-        <Btn onClick={doSubmit} disabled={saving||!memberId||attending===null||(attending&&!isConfirmed&&parking===null)}>{saving?"送信中...":myResp?"変更を保存 →":"登録する →"}</Btn>
-        {editing&&<Btn variant="ghost" onClick={()=>setEditing(false)} style={{marginTop:8}}>キャンセル</Btn>}
-      </>}
-    </div>}
-
     {unanswered.length>0&&<div style={{...S.card,marginTop:8}}>
       <div style={{...S.row,marginBottom:8}}>
         <div style={{fontSize:12,color:C.dim}}>📭 未回答 {unanswered.length}名</div>
@@ -947,112 +339,10 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{unanswered.map(r=><Tag key={r.id} label={`#${r.num} ${r.name}`} color="gray"/>)}</div>
     </div>}
-    </Accordion>
-
-    {getEventMode(event)==="carpool"&&<Accordion title="🚙 配車（機能2）" open={sectionOpen.carpool} onToggle={()=>toggleSection("carpool")} accent="rgba(132,204,22,0.4)">
-    {(()=>{
-      const plan=lottery?.carpoolPlan;
-      const attendCount=Object.values(responses).filter(r=>r&&r.attending).length;
-      if(!plan){
-        return <div>
-          <div style={{...S.card,background:"rgba(56,189,248,0.05)",borderColor:"rgba(56,189,248,0.3)"}}>
-            <div style={{fontWeight:900,color:C.sky,marginBottom:8}}>🎯 配車最適化</div>
-            <p style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.6}}>参加者と乗合可能ドライバーから、駐車場枠 <b>{event.parkingLimit||0}台</b> を最も効率よく使う配車を貪欲法で計算します。</p>
-            <p style={{fontSize:11,color:C.dim,marginBottom:12}}>現在の出席者: {attendCount}名</p>
-            <Btn variant="yellow" onClick={()=>onOptimizeCarpool(event.id)} disabled={attendCount===0}>🎯 配車を最適化する</Btn>
-          </div>
-        </div>;
-      }
-      const driverIds=plan.selectedDrivers.map(d=>d.id);
-      const myIsDriver=memberId&&driverIds.includes(memberId);
-      const myAssignedDriver=memberId&&!myIsDriver?Object.entries(plan.assignments||{}).find(([d,riders])=>riders.includes(memberId))?.[0]:null;
-      const myIsUnassigned=memberId&&(plan.unassigned||[]).includes(memberId);
-      return <>
-        <div style={{...S.card,background:"rgba(132,204,22,0.05)",borderColor:"rgba(132,204,22,0.3)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontWeight:900,color:C.limeLight}}>🎯 配車プラン</div>
-            <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>onOptimizeCarpool(event.id)} style={S.btnSm}>🔄 再計算</button>
-              <button onClick={()=>{
-                const L=[`🚙 配車プラン`,`📌 ${event.title}`,`🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}`];
-                if(event.location){L.push(`📍 ${event.location}`);L.push(`🗺 ${mapUrl(event.location)}`)}
-                L.push("━━━━━━━━━━━━");
-                L.push(`✅ 参加可能: ${plan.coveredCount}/${plan.attendeeCount}名（${driverIds.length}台使用）`);
-                L.push("");
-                plan.selectedDrivers.forEach((d,i)=>{
-                  const dm=roster.find(r=>r.id===d.id);if(!dm)return;
-                  const mp=responses[d.id]?.meetingPoint;
-                  const tm=responses[d.id]?.driverDepartTime;
-                  L.push(`🚗 ${i+1}号車: #${dm.num} ${dm.name}（+${d.capacity}人乗合）`);
-                  if(mp)L.push(`  📍 ${mp}${tm?` ${tm}`:""}`);
-                  const riders=plan.assignments[d.id]||[];
-                  if(riders.length){L.push(`  ✅ 乗車: `+riders.map(rid=>{const me=roster.find(r=>r.id===rid);return me?`#${me.num} ${me.name}`:""}).filter(Boolean).join(", "))}
-                  L.push("");
-                });
-                if(plan.unassigned&&plan.unassigned.length){
-                  L.push("⚠️ 未割当（参加できない可能性）");
-                  plan.unassigned.forEach(id=>{const me=roster.find(r=>r.id===id);if(me)L.push(`  ・#${me.num} ${me.name}`)});
-                }
-                const txt=L.join("\n");
-                if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
-                else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
-                  const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！");
-                })}
-              }} style={S.btnSm}>📋 LINE共有</button>
-            </div>
-          </div>
-          <div style={{display:"flex",gap:8,marginBottom:12}}>
-            <div style={{...S.stat,background:"rgba(132,204,22,0.1)"}}><div style={{fontSize:18,fontWeight:900,color:C.limeLight}}>{plan.coveredCount}<span style={{fontSize:11,color:C.dim}}>/{plan.attendeeCount}名</span></div><div style={{fontSize:11,color:C.muted}}>参加可能</div></div>
-            <div style={S.stat}><div style={{fontSize:18,fontWeight:900,color:C.amber}}>{driverIds.length}<span style={{fontSize:11,color:C.dim}}>/{event.parkingLimit||0}台</span></div><div style={{fontSize:11,color:C.muted}}>使用駐車場</div></div>
-            {plan.unassigned&&plan.unassigned.length>0&&<div style={S.stat}><div style={{fontSize:18,fontWeight:900,color:"#f87171"}}>{plan.unassigned.length}</div><div style={{fontSize:11,color:C.muted}}>未割当</div></div>}
-          </div>
-          {(()=>{const settings=getTeamSettings(teamMeta);return plan.selectedDrivers.map((d,i)=>{const dm=roster.find(r=>r.id===d.id);if(!dm)return null;
-            const riders=plan.assignments[d.id]||[];
-            const dResp=responses[d.id]||{};
-            const cost=computeDriverCost(event,settings,riders.length);
-            return <div key={d.id} style={{background:"rgba(0,0,0,0.2)",borderRadius:12,padding:12,marginBottom:8}}>
-              <div style={{fontSize:13,fontWeight:700,color:C.amber,marginBottom:6}}>🚗 {i+1}号車: #{dm.num} {dm.name}（+{d.capacity}人乗合）</div>
-              {dResp.meetingPoint?<div style={{fontSize:12,color:C.limeLight,marginBottom:6}}>📍 {dResp.meetingPoint}{dResp.driverDepartTime?` ${dResp.driverDepartTime}`:""}</div>
-                :myIsDriver&&memberId===d.id?<div style={{background:"rgba(245,158,11,0.1)",borderRadius:8,padding:8,marginBottom:6,fontSize:11,color:C.amber}}>↓ あなたの集合場所・出発時刻を登録してください</div>
-                :<div style={{fontSize:11,color:C.dim,marginBottom:6}}>📍 集合場所未登録</div>}
-              {myIsDriver&&memberId===d.id&&<div style={{marginBottom:8}}>
-                <input value={driverMpInput} onChange={e=>setDriverMpInput(e.target.value)} placeholder="集合場所（例：○○駅 西口）" style={{...S.input,marginBottom:6,fontSize:13,padding:"8px 10px"}}/>
-                <input type="time" value={dResp.driverDepartTime||""} onChange={e=>onSaveCarpool(event.id,memberId,{driverDepartTime:e.target.value})} style={{...S.input,colorScheme:"dark",marginBottom:6,fontSize:13,padding:"8px 10px"}}/>
-                <button onClick={saveDriverMeetingPoint} disabled={savingCarpool} style={{...S.btnSm,background:C.amber,color:"#052e16",width:"100%"}}>{savingCarpool?"保存中...":"💾 集合場所を保存"}</button>
-              </div>}
-              {riders.length>0?<div>
-                <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚙 乗車者（{riders.length}/{d.capacity}名）</div>
-                {riders.map(rid=>{const m=roster.find(r=>r.id===rid);return m?<div key={rid} style={{fontSize:13,color:C.limeLight,marginBottom:2}}>・#{m.num} {m.name}{memberId===rid?" (あなた)":""}</div>:null})}
-              </div>:<div style={{fontSize:11,color:C.dim}}>🚙 乗車者なし</div>}
-              {cost&&riders.length>0&&<div style={{background:"rgba(56,189,248,0.08)",borderRadius:10,padding:10,marginTop:8,fontSize:12}}>
-                <div style={{color:C.sky,fontWeight:700,marginBottom:4}}>💰 費用按分</div>
-                <div style={{color:C.muted,fontSize:11,lineHeight:1.6}}>ガソリン代: {cost.gas.toLocaleString()}円{cost.toll>0?` ／ 高速: ${cost.toll.toLocaleString()}円`:""}{cost.handlingFee>0?` ／ 手間賃: ${cost.handlingFee.toLocaleString()}円`:""}</div>
-                <div style={{color:C.muted,fontSize:11,marginTop:2}}>合計: <b style={{color:"#fff"}}>{cost.total.toLocaleString()}円</b></div>
-                <div style={{marginTop:6,padding:"6px 10px",background:"rgba(56,189,248,0.15)",borderRadius:8,fontWeight:700,color:C.sky,fontSize:14}}>1人あたり: {cost.perPassenger.toLocaleString()}円 × {cost.numPassengers}名</div>
-              </div>}
-            </div>;
-          })})()}
-          {plan.unassigned&&plan.unassigned.length>0&&<div style={{background:"rgba(239,68,68,0.08)",borderRadius:12,padding:12,marginTop:8}}>
-            <div style={{fontSize:12,color:"#f87171",fontWeight:700,marginBottom:6}}>⚠️ 未割当 {plan.unassigned.length}名（駐車場枠不足）</div>
-            {plan.unassigned.map(id=>{const me=roster.find(r=>r.id===id);return me?<div key={id} style={{fontSize:12,color:C.muted}}>・#{me.num} {me.name}{memberId===id?" (あなた)":""}</div>:null})}
-          </div>}
-          {myAssignedDriver&&(()=>{const dm=roster.find(r=>r.id===myAssignedDriver);return dm?
-            <div style={{background:"rgba(56,189,248,0.1)",borderRadius:12,padding:12,marginTop:8,border:"1px solid rgba(56,189,248,0.3)"}}>
-              <div style={{fontSize:12,color:C.sky,fontWeight:700}}>📌 あなたは {dm.name}さんの車に乗車予定です</div>
-              {responses[myAssignedDriver]?.meetingPoint&&<div style={{fontSize:12,color:C.muted,marginTop:4}}>📍 {responses[myAssignedDriver].meetingPoint}{responses[myAssignedDriver]?.driverDepartTime?` ${responses[myAssignedDriver].driverDepartTime}`:""}</div>}
-            </div>:null;
-          })()}
-          {myIsUnassigned&&<div style={{background:"rgba(239,68,68,0.1)",borderRadius:12,padding:12,marginTop:8}}>
-            <div style={{fontSize:12,color:"#f87171",fontWeight:700}}>⚠️ あなたは現状未割当です。試合に参加できない可能性があります。</div>
-          </div>}
-        </div>
-      </>;
-    })()}
-    </Accordion>}
   </div>);
 }
 // ── ADMIN SCREEN ──
-function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSaveEvent,onDeleteEvent,onSaveRoster,onRunLottery,onReLottery,onResetResponses,onBack,onNav,teamId,teamMeta,onUpdateTeamName,onLeaveTeam,onUpdateTeamSettings}){
+function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSaveEvent,onDeleteEvent,onSaveRoster,onRunLottery,onResetResponses,onBack,onNav}){
   const[tab,setTab]=useState("events");
   const[msg,setMsg]=useState("");
   const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),3000)};
@@ -1082,19 +372,6 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
   const[evDirty,setEvDirty]=useState(false);
   const[evConfirmed,setEvConfirmed]=useState([]);
   const[evGrades,setEvGrades]=useState([]);
-  const[detailsOpen,setDetailsOpen]=useState(false);
-  const[attName,setAttName]=useState("");
-  const[attUrl,setAttUrl]=useState("");
-  const[parseInput,setParseInput]=useState("");
-  const[parseOpen,setParseOpen]=useState(false);
-  const[parseFlash,setParseFlash]=useState("");
-
-  useEffect(()=>{
-    if(editEv){
-      const hasDetails=!!(editEv.opponent||editEv.location||editEv.kickoffTime||editEv.meetTime||editEv.endTime||editEv.uniformColor||editEv.notes||(editEv.attachments&&editEv.attachments.length));
-      setDetailsOpen(hasDetails);
-    }
-  },[editEv?.id]);
 
   function startEdit(ev){setEditEv({...ev});setEvLimit(ev.parkingLimit||5);setEvConfirmed(ev.confirmedParking||[]);setEvGrades(ev.inviteGrades||[...allGrades]);setEvErr("");setEvDirty(false)}
   function startNew(){const id=uid();setEditEv({_new:true,id,title:"",matchDate:"",deadline:"",parkingLimit:5});setEvLimit(5);setEvConfirmed([]);setEvGrades([...allGrades]);setEvErr("");setEvDirty(false)}
@@ -1119,67 +396,12 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
     if((tab==="events"&&editEv&&evDirty)||(tab==="roster"&&rosterDirty)){const ok=await confirm("保存せずに戻りますか？");if(!ok)return}
     onBack()}
 
-  const TABS=[["events","📅 試合"],["roster","👦 名簿"],["check","📋 回答"],["team","⚙️ 設定"]];
-  const[teamNameDraft,setTeamNameDraft]=useState("");
-  const[teamFlash,setTeamFlash]=useState("");
-  const[copyFlash,setCopyFlash]=useState(false);
-  const[settingsDraft,setSettingsDraft]=useState({});
-  const[settingsFlash,setSettingsFlash]=useState("");
-  useEffect(()=>{if(tab==="team"&&teamMeta){setTeamNameDraft(teamMeta.name||"");setSettingsDraft(getTeamSettings(teamMeta))}},[tab,teamMeta?.name]);
-  const shareUrl=teamId?`${window.location.origin}${window.location.pathname.replace(/\/index[^/]*\.html$/,"/")}?team=${teamId}`:"";
-  async function copyShareUrl(){
-    try{await navigator.clipboard.writeText(shareUrl);setCopyFlash(true);setTimeout(()=>setCopyFlash(false),3000)}
-    catch(e){
-      const el=document.createElement("textarea");el.value=shareUrl;document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);
-      setCopyFlash(true);setTimeout(()=>setCopyFlash(false),3000);
-    }
-  }
-  async function saveTeamName(){
-    await onUpdateTeamName(teamNameDraft);
-    setTeamFlash("✅ チーム名を更新しました");setTimeout(()=>setTeamFlash(""),3000);
-  }
-  async function saveSettings(){
-    const cleaned={
-      gasPrice:parseFloat(settingsDraft.gasPrice)||170,
-      fuelEconomy:parseFloat(settingsDraft.fuelEconomy)||10,
-      handlingFee:parseInt(settingsDraft.handlingFee)||0
-    };
-    await onUpdateTeamSettings(cleaned);
-    setSettingsFlash("✅ 設定を保存しました");setTimeout(()=>setSettingsFlash(""),3000);
-  }
-  async function leaveTeam(){
-    if(!await confirm("このチームから抜けますか？\n（データは削除されません。再度コードで参加可能）"))return;
-    onLeaveTeam();
-  }
+  const TABS=[["events","📅 試合"],["roster","👦 名簿"],["check","📋 回答"]];
   const evRoster=editEv?roster.filter(r=>(evGrades||allGrades).includes(r.grade||"4年")):[];
 
   if(editEv)return(<div>
     <BackBar title={editEv._new?"試合を追加":"試合を編集"} onBack={cancelEditEv} label="← キャンセル"/>
     {evDirty&&<p style={{textAlign:"center",fontSize:11,color:C.amber,marginBottom:8}}>● 未保存の変更</p>}
-
-    <div style={S.card}>
-      <button onClick={()=>setParseOpen(o=>!o)} style={{background:"none",border:"none",color:"#fff",fontFamily:"inherit",width:"100%",textAlign:"left",cursor:"pointer",padding:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontSize:13,color:C.limeLight,fontWeight:900}}>✨ LINE文を貼り付けて自動入力</div>
-        <div style={{fontSize:14,color:C.dim}}>{parseOpen?"▲":"▼"}</div>
-      </button>
-      {parseOpen&&<div style={{marginTop:12}} className="fade-in">
-        <p style={{fontSize:11,color:C.dim,marginBottom:8,lineHeight:1.5}}>コーチからの試合連絡（日時・対戦相手・会場・集合時刻・KO・ユニ等）をそのまま貼り付けて「解析」を押してください</p>
-        <textarea value={parseInput} onChange={e=>setParseInput(e.target.value)} placeholder={"例：\n5/23(土) 9:00 KO\n会場：中央公園グラウンド\n対戦相手 鶴ヶ岡FC\n集合 8:00\n終了 11:00\nユニ：白"} rows={6} style={{...S.input,resize:"vertical",minHeight:90,fontFamily:"inherit",marginBottom:8}}/>
-        {parseFlash&&<p style={{fontSize:12,color:C.limeLight,textAlign:"center",marginBottom:8}}>{parseFlash}</p>}
-        <Btn variant="yellow" onClick={()=>{
-          const parsed=parseLineMessage(parseInput);
-          const keys=Object.keys(parsed);
-          if(keys.length===0){setParseFlash("⚠️ 抽出できる項目がありませんでした");setTimeout(()=>setParseFlash(""),3000);return}
-          keys.forEach(k=>updateEv(k,parsed[k]));
-          // Open match details accordion so user can verify
-          setDetailsOpen(true);
-          setParseFlash(`✅ ${keys.length}項目を自動入力: ${keys.join(", ")}`);
-          setTimeout(()=>setParseFlash(""),5000);
-          setParseInput("");setParseOpen(false);
-        }}>✨ 解析して入力</Btn>
-      </div>}
-    </div>
-
     <div style={S.card}>
       <div style={{fontSize:12,color:C.dim,marginBottom:6}}>タイトル</div>
       <input value={editEv.title} onChange={e=>updateEv("title",e.target.value)} placeholder="例：土曜 練習試合" style={S.input} autoComplete="off"/>
@@ -1215,95 +437,6 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
       <div style={{fontSize:12,color:C.sky,marginTop:8,fontWeight:700}}>確定: {evConfirmed.length}台 ／ 抽選枠: {Math.max(0,evLimit-evConfirmed.length)}台</div>
     </div>
 
-    <div style={S.card}>
-      <button onClick={()=>setDetailsOpen(o=>!o)} style={{background:"none",border:"none",color:"#fff",fontFamily:"inherit",width:"100%",textAlign:"left",cursor:"pointer",padding:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontSize:12,color:C.dim}}>📋 試合要項（任意）</div>
-        <div style={{fontSize:14,color:C.dim}}>{detailsOpen?"▲":"▼"}</div>
-      </button>
-      {detailsOpen&&<div style={{marginTop:12}} className="fade-in">
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🆚 対戦相手</div>
-          <input value={editEv.opponent||""} onChange={e=>updateEv("opponent",e.target.value)} placeholder="例：鶴ヶ岡FC" style={S.input} autoComplete="off"/>
-        </div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📍 会場</div>
-          <input value={editEv.location||""} onChange={e=>updateEv("location",e.target.value)} placeholder="例：中央公園グラウンド" style={S.input} autoComplete="off"/>
-        </div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⏰ 集合時刻</div>
-          <input type="time" value={editEv.meetTime||""} onChange={e=>updateEv("meetTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
-        </div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🏆 キックオフ</div>
-          <input type="time" value={editEv.kickoffTime||""} onChange={e=>updateEv("kickoffTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
-        </div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🏁 終了予定</div>
-          <input type="time" value={editEv.endTime||""} onChange={e=>updateEv("endTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
-        </div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>👕 ユニフォーム色</div>
-          <input value={editEv.uniformColor||""} onChange={e=>updateEv("uniformColor",e.target.value)} placeholder="例：白 / 紺" style={S.input} autoComplete="off"/>
-        </div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📝 備考</div>
-          <textarea value={editEv.notes||""} onChange={e=>updateEv("notes",e.target.value)} placeholder="その他連絡事項" rows={3} style={{...S.input,resize:"vertical",minHeight:60,fontFamily:"inherit"}}/>
-        </div>
-        <div>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📎 資料リンク（Google ドライブ等の共有URL）</div>
-          {(editEv.attachments||[]).map(a=><div key={a.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"8px 12px",marginBottom:6}}>
-            <a href={a.url} target="_blank" rel="noopener noreferrer" style={{color:C.limeLight,fontSize:13,textDecoration:"none",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {a.name||"リンク"}</a>
-            <button onClick={()=>updateEv("attachments",(editEv.attachments||[]).filter(x=>x.id!==a.id))} style={{background:"rgba(239,68,68,0.15)",border:"none",color:"rgba(248,113,113,0.7)",fontSize:14,cursor:"pointer",padding:"4px 10px",borderRadius:6,marginLeft:8}}>×</button>
-          </div>)}
-          <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
-            <input value={attName} onChange={e=>setAttName(e.target.value)} placeholder="表示名（例：試合要綱）" style={{...S.input,flex:"1 1 130px",fontSize:13,padding:"8px 10px"}} autoComplete="off"/>
-            <input value={attUrl} onChange={e=>setAttUrl(e.target.value)} placeholder="https://..." style={{...S.input,flex:"1 1 130px",fontSize:13,padding:"8px 10px"}} autoComplete="off"/>
-            <button onClick={()=>{
-              if(!attUrl.trim()){alert("URLを入力してください");return}
-              const next=[...(editEv.attachments||[]),{id:uid(),name:attName.trim()||"リンク",url:attUrl.trim()}];
-              updateEv("attachments",next);setAttName("");setAttUrl("");
-            }} style={{...S.btnSm,background:C.lime,color:"#052e16"}}>＋追加</button>
-          </div>
-          <div style={{fontSize:10,color:C.dim,marginTop:6,lineHeight:1.5}}>※ Googleドライブの場合は「リンクを知っている全員」共有に設定してから貼り付けてください</div>
-        </div>
-      </div>}
-    </div>
-
-    <div style={S.card}>
-      <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>🎯 動作モード</div>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:10,borderRadius:12,background:(editEv.mode||"simple")==="simple"?"rgba(132,204,22,0.12)":"rgba(255,255,255,0.04)",border:(editEv.mode||"simple")==="simple"?"2px solid "+C.lime:"1px solid rgba(255,255,255,0.1)"}}>
-          <input type="radio" name="evmode" checked={(editEv.mode||"simple")==="simple"} onChange={()=>updateEv("mode","simple")} style={{marginTop:3}}/>
-          <div>
-            <div style={{fontSize:13,fontWeight:700}}>機能1: シンプル（駐車場抽選のみ）</div>
-            <div style={{fontSize:11,color:C.dim,marginTop:2,lineHeight:1.5}}>あみだくじで駐車場を抽選。乗合可能人数は表示するが、マッチングは行わない。落選者は保護者間で個別連絡</div>
-          </div>
-        </label>
-        <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:10,borderRadius:12,background:editEv.mode==="carpool"?"rgba(56,189,248,0.12)":"rgba(255,255,255,0.04)",border:editEv.mode==="carpool"?"2px solid "+C.sky:"1px solid rgba(255,255,255,0.1)"}}>
-          <input type="radio" name="evmode" checked={editEv.mode==="carpool"} onChange={()=>updateEv("mode","carpool")} style={{marginTop:3}}/>
-          <div>
-            <div style={{fontSize:13,fontWeight:700}}>機能2: 乗合最適化（参加最大化）</div>
-            <div style={{fontSize:11,color:C.dim,marginTop:2,lineHeight:1.5}}>駐車枠数 + 各車両の乗車可能人数から、参加人数が最大になる様に乗合車を自動選定。集合場所・時間・費用按分まで管理</div>
-          </div>
-        </label>
-      </div>
-    </div>
-
-    {editEv.mode==="carpool"&&<div style={S.card}>
-      <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>💰 費用算定（機能2 / 任意）</div>
-      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <div>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🛣 往復距離（km）</div>
-          <input type="number" min="0" step="0.1" value={editEv.roundTripKm||""} onChange={e=>updateEv("roundTripKm",e.target.value?parseFloat(e.target.value):"")} placeholder="例：50" style={S.input}/>
-        </div>
-        <div>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚗 高速代（円・往復合計）</div>
-          <input type="number" min="0" step="100" value={editEv.tollFee||""} onChange={e=>updateEv("tollFee",e.target.value?parseInt(e.target.value):"")} placeholder="例：2000" style={S.input}/>
-        </div>
-      </div>
-      <p style={{fontSize:10,color:C.dim,marginTop:8,lineHeight:1.5}}>※ ガソリン代はチーム設定の「ガソリン単価」「燃費」と往復距離から自動計算されます</p>
-    </div>}
-
     <ErrMsg msg={evErr}/>
     <Btn onClick={saveEditEv} style={{marginBottom:8}}>💾 保存する</Btn>
     <Btn variant="ghost" onClick={cancelEditEv}>キャンセル</Btn>
@@ -1337,12 +470,10 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {!lott?.conducted&&hopefuls>0&&<button onClick={()=>{onSelectEvent(ev.id);onRunLottery(ev.id)}} style={S.btnSmY}>🎰 抽選{hopefuls>lottSlots?`（${hopefuls}→${lottSlots}台）`:"（全員当選）"}</button>}
-            {(()=>{const ds=getDropouts(ev,resp,lott);return ds&&ds.openSlots>0&&ds.eligibleLosers.length>0&&<button onClick={()=>{onSelectEvent(ev.id);onReLottery(ev.id)}} style={{...S.btnSmY,background:"#dc2626",color:"#fff"}}>🔄 再抽選（空き{ds.openSlots}枠）</button>})()}
             {lott?.conducted&&<button onClick={()=>{onSelectEvent(ev.id);onNav("results")}} style={S.btnSmO}>結果を見る</button>}
             <button onClick={()=>{
               const url=window.location.href.split('#')[0];
-              const details=fmtMatchDetails(ev);
-              const txt=`🏆 新しい試合のお知らせ\n━━━━━━━━━━━━\n📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}${details?"\n"+details:""}\n⏰ 締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n━━━━━━━━━━━━\n👇 参加・駐車場の回答はこちら\n${url}`;
+              const txt=`⚽ 新しい試合のお知らせ\n━━━━━━━━━━━━\n📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}\n⏰ 締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n━━━━━━━━━━━━\n👇 参加・駐車場の回答はこちら\n${url}`;
               if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
               else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
                 const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！LINEに貼り付けてください");
@@ -1402,63 +533,6 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
         </div>)})}
     </div>}
 
-    {tab==="team"&&<div>
-      <div style={S.card}>
-        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>チームコード</div>
-        <div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:C.limeLight,textAlign:"center",padding:"8px 0"}}>{teamId||"-"}</div>
-        <div style={{fontSize:11,color:C.dim,textAlign:"center"}}>このコードを保護者と共有してください</div>
-      </div>
-      {teamId&&<div style={S.card}>
-        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>チーム名</div>
-        <input value={teamNameDraft} onChange={e=>setTeamNameDraft(e.target.value)} placeholder="例：港北FC U-12" style={S.input}/>
-        <FlashMsg msg={teamFlash}/>
-        <Btn onClick={saveTeamName} style={{marginTop:8}} disabled={!teamNameDraft.trim()||teamNameDraft===teamMeta?.name}>💾 チーム名を更新</Btn>
-      </div>}
-      {teamId&&<div style={S.card}>
-        <div style={{fontSize:12,color:C.dim,marginBottom:6}}>共有URL</div>
-        <div style={{background:"rgba(0,0,0,0.25)",borderRadius:10,padding:"10px 12px",fontSize:11,color:C.muted,wordBreak:"break-all",marginBottom:8}}>{shareUrl}</div>
-        <Btn onClick={copyShareUrl}>{copyFlash?"✅ コピーしました":"📋 URLをコピー"}</Btn>
-        <button onClick={()=>{
-          const txt=`🏆 駐車場抽選アプリ\n━━━━━━━━━━━━\n📌 ${teamMeta?.name||"チーム"} 専用URL\n🔑 チームコード: ${teamId}\n━━━━━━━━━━━━\n👇 こちらから参加してください\n${shareUrl}`;
-          if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
-          else{navigator.clipboard.writeText(txt).then(()=>alert("LINE文をコピーしました")).catch(()=>{
-            const el=document.createElement("textarea");el.value=txt;document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました");
-          })}
-        }} style={{...S.btnSm,width:"100%",marginTop:8}}>📢 LINE用招待文を生成</button>
-      </div>}
-      {teamId&&<div style={S.card}>
-        <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>💰 費用算定設定（機能2用）</div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⛽ ガソリン単価（円/L）</div>
-          <input type="number" min="0" step="1" value={settingsDraft.gasPrice||""} onChange={e=>setSettingsDraft(s=>({...s,gasPrice:e.target.value}))} placeholder="170" style={S.input}/>
-        </div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🚗 燃費（km/L）</div>
-          <input type="number" min="0" step="0.1" value={settingsDraft.fuelEconomy||""} onChange={e=>setSettingsDraft(s=>({...s,fuelEconomy:e.target.value}))} placeholder="10" style={S.input}/>
-        </div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>💵 手間賃（円・ドライバーへの謝礼／往復1回あたり）</div>
-          <input type="number" min="0" step="100" value={settingsDraft.handlingFee??""} onChange={e=>setSettingsDraft(s=>({...s,handlingFee:e.target.value}))} placeholder="0" style={S.input}/>
-        </div>
-        <FlashMsg msg={settingsFlash}/>
-        <Btn onClick={saveSettings}>💾 費用設定を保存</Btn>
-        <p style={{fontSize:10,color:C.dim,marginTop:8,lineHeight:1.5}}>※ 試合作成時に「往復距離」「高速代」を入力すると、これらの設定値から1人あたりの負担金額を自動計算します</p>
-      </div>}
-
-      {teamId&&<div style={S.card}>
-        <div style={{fontSize:12,color:C.dim,marginBottom:8}}>チーム切替</div>
-        <p style={{fontSize:11,color:C.dim,marginBottom:8,lineHeight:1.5}}>このチームから抜けて、別のチームに参加できます（データは削除されません）</p>
-        <Btn variant="ghost" onClick={leaveTeam}>← チームから抜ける</Btn>
-      </div>}
-      <div style={S.card}>
-        <div style={{fontSize:12,color:C.dim,marginBottom:8}}>規約・ポリシー</div>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>onNav("privacy")} style={{...S.btnSm,flex:1}}>プライバシー</button>
-          <button onClick={()=>onNav("terms")} style={{...S.btnSm,flex:1}}>利用規約</button>
-        </div>
-      </div>
-    </div>}
-
     {modal&&<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
       <div style={{background:"#0a2a0a",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:24,width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.5)"}}>
         <p style={{color:"#fff",marginBottom:24,fontSize:15,fontWeight:700,whiteSpace:"pre-wrap",lineHeight:1.6}}>{modal.m}</p>
@@ -1480,7 +554,7 @@ function buildPaths(n,rows,rungs,CW,RH,PX,PY){
     for(let r=0;r<rows;r++){const my=PY+(r+.5)*RH,ny=PY+(r+1)*RH;if(rungs[r].has(col)){d+=`L${cx(col)},${my}L${cx(col+1)},${my}`;col++;d+=`L${cx(col)},${ny}`}else if(col>0&&rungs[r].has(col-1)){d+=`L${cx(col)},${my}L${cx(col-1)},${my}`;col--;d+=`L${cx(col)},${ny}`}else d+=`L${cx(col)},${ny}`}
     return{d,finalCol:col}});
 }
-function LotteryScreen({event,participants,limit,isRerun,mode,carpoolPoint,onComplete,onBack}){
+function LotteryScreen({event,participants,limit,onComplete,onBack}){
   const n=participants.length;const ref=useRef(null);
   const[svgW,setSvgW]=useState(340);
   useEffect(()=>{if(ref.current)setSvgW(ref.current.offsetWidth-16)},[]);
@@ -1514,11 +588,9 @@ function LotteryScreen({event,participants,limit,isRerun,mode,carpoolPoint,onCom
   },[curIdx,phase]);
 
   return(<div>
-    <BackBar title={mode==="carpool"?"🚙 配車あみだくじ":isRerun?"🔄 再抽選":"🎰 あみだくじ抽選"} onBack={onBack} label="← 戻る"/>
+    <BackBar title="🎰 あみだくじ抽選" onBack={onBack} label="← 戻る"/>
     <div style={{...S.card,textAlign:"center"}}>
-      {mode==="carpool"&&<div style={{color:C.limeLight,fontSize:12,fontWeight:700,marginBottom:6}}>📍 {carpoolPoint}（定員オーバーのため乗車者を決定）</div>}
-      {isRerun&&mode!=="carpool"&&<div style={{color:C.amber,fontSize:12,fontWeight:700,marginBottom:6}}>⚠️ 当選者キャンセルによる再抽選</div>}
-      <span style={{color:C.muted,fontSize:14}}><span style={{color:C.amber,fontWeight:700}}>{n}名</span> の希望者 → <span style={{color:C.limeLight,fontWeight:700}}>{limit}{mode==="carpool"?"席":isRerun?"枠":"台"}</span> 当選</span>
+      <span style={{color:C.muted,fontSize:14}}><span style={{color:C.amber,fontWeight:700}}>{n}名</span> の希望者 → <span style={{color:C.limeLight,fontWeight:700}}>{limit}台</span> 当選</span>
     </div>
     <div ref={ref} style={{width:"100%",overflowX:"auto",background:"rgba(0,0,0,0.25)",borderRadius:16,padding:8,marginBottom:12}}>
       <svg width={SVG_W} height={SVG_H} style={{minWidth:SVG_W,display:"block",margin:"0 auto"}}>
@@ -1537,16 +609,13 @@ function LotteryScreen({event,participants,limit,isRerun,mode,carpoolPoint,onCom
 }
 
 // ── RESULTS ──
-function ResultsScreen({event,roster,responses,lottery,onReLottery,onBack}){
+function ResultsScreen({event,roster,responses,lottery,onBack}){
   const[copied,setCopied]=useState(false);
   if(!lottery?.conducted)return(<div style={{textAlign:"center",paddingTop:64}}><p style={{color:C.muted}}>まだ抽選が行われていません</p><Btn variant="ghost" onClick={onBack} style={{marginTop:16}}>← 戻る</Btn></div>);
   const confirmed=getConfirmed(event);
   const confirmedMembers=confirmed.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
   const winnerIds=lottery.winners||[];
-  const dropoutState=getDropouts(event,responses,lottery);
-  const dropoutIds=dropoutState?.dropouts||[];
-  const winners=roster.filter(r=>(winnerIds.includes(r.id)||winnerIds.includes(r.name))&&!dropoutIds.includes(r.id));
-  const dropouts=dropoutIds.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
+  const winners=roster.filter(r=>winnerIds.includes(r.id)||winnerIds.includes(r.name));
   const losers=Object.entries(responses).filter(([id,r])=>r.attending&&r.parkingNeeded&&!confirmed.includes(id)).map(([id])=>roster.find(r=>r.id===id)).filter(r=>r&&!winnerIds.includes(r.id)&&!winnerIds.includes(r.name));
   const walkers=Object.entries(responses).filter(([_,r])=>r.attending&&!r.parkingNeeded).map(([id])=>roster.find(r=>r.id===id)).filter(Boolean);
   const absent=Object.entries(responses).filter(([_,r])=>!r.attending).map(([id])=>roster.find(r=>r.id===id)).filter(Boolean);
@@ -1554,9 +623,7 @@ function ResultsScreen({event,roster,responses,lottery,onReLottery,onBack}){
   const noReply=er.filter(r=>!responses[r.id]);
 
   function genText(){
-    const L=[`🏆 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`];
-    if(event?.location){L.push(`📍 ${event.location}`);L.push(`🗺 ${mapUrl(event.location)}`)}
-    L.push("━━━━━━━━━━━━");
+    const L=[`⚽ 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`,"━━━━━━━━━━━━"];
     const formatName = (user) => {
       const res = responses[user.id];
       const carpool = res && res.carpoolCapacity > 0 ? `(乗合+${res.carpoolCapacity})` : "";
@@ -1606,13 +673,6 @@ function ResultsScreen({event,roster,responses,lottery,onReLottery,onBack}){
       <div style={{fontWeight:900,color:C.amber,marginBottom:12}}>🚗 当選 {winners.length}名</div>
       {winners.length>0?winners.map(w=><div key={w.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(245,158,11,0.1)",borderRadius:12,padding:"10px 12px",marginBottom:8}}><span style={{fontSize:20}}>🎊</span><span style={{fontWeight:700}}>#{w.num} {w.name}</span></div>):<p style={{color:C.dim,fontSize:14}}>当選者なし</p>}
     </div>
-    {dropouts.length>0&&<div style={{...S.card,borderColor:"rgba(239,68,68,0.4)",background:"rgba(239,68,68,0.05)"}}>
-      <div style={{fontWeight:900,color:"#f87171",marginBottom:10}}>⚠️ 当選者キャンセル {dropouts.length}名 / 空き枠 {dropoutState?.openSlots||0}台</div>
-      {dropouts.map(d=><div key={d.id} style={{display:"flex",alignItems:"center",gap:8,background:"rgba(239,68,68,0.08)",borderRadius:12,padding:"8px 12px",marginBottom:4}}>
-        <span style={{fontSize:16}}>💧</span><span style={{color:"#f87171",fontSize:14}}>#{d.num} {d.name}</span>
-      </div>)}
-      {dropoutState&&dropoutState.openSlots>0&&dropoutState.eligibleLosers.length>0&&onReLottery&&<Btn variant="yellow" onClick={()=>onReLottery(event.id)} style={{marginTop:10}}>🔄 再抽選を実施（空き{dropoutState.openSlots}枠 / 候補{dropoutState.eligibleLosers.length}名）</Btn>}
-    </div>}
     {losers.length>0&&<div style={S.card}><div style={{fontWeight:700,color:C.muted,marginBottom:10}}>😢 落選 {losers.length}名</div>{losers.map(l=><div key={l.id} style={{display:"flex",alignItems:"center",gap:8,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:"8px 12px",marginBottom:4}}><span style={{color:C.dim}}>×</span><span style={{color:C.muted,fontSize:14}}>#{l.num} {l.name}</span></div>)}</div>}
     {walkers.length>0&&<div style={S.card}><div style={{fontWeight:700,color:C.limeLight,marginBottom:8}}>🚶 徒歩参加 {walkers.length}名</div><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{walkers.map(a=><Tag key={a.id} label={`#${a.num} ${a.name}`} color="lime"/>)}</div></div>}
     {absent.length>0&&<div style={S.card}><div style={{fontWeight:700,color:"rgba(248,113,113,0.7)",marginBottom:8}}>🏠 欠席 {absent.length}名</div><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{absent.map(a=><Tag key={a.id} label={`#${a.num} ${a.name}`} color="red"/>)}</div></div>}
@@ -1631,57 +691,11 @@ function App(){
   const[allLotteries,setAllLotteries]=useState({});
   const[selectedEventId,setSelectedEventId]=useState(null);
   const[lottParticipants,setLottParticipants]=useState([]);
-  const[lottLimit,setLottLimit]=useState(0);
-  const[lottIsRerun,setLottIsRerun]=useState(false);
-  const[lottMode,setLottMode]=useState("parking");
-  const[lottCarpoolPoint,setLottCarpoolPoint]=useState("");
   const[dataLoading,setDataLoading]=useState(true);
   const[syncing,setSyncing]=useState(false);
   const[errorMsg,setErrorMsg]=useState("");
-  const[teamId,setTeamIdState]=useState(TEAM_ID);
-  const[teamMeta,setTeamMeta]=useState(null);
-  const[maintenanceNotice,setMaintenanceNotice]=useState(null);
-  useEffect(()=>{fbRootGet("maintenance").then(n=>setMaintenanceNotice(n))},[screen]);
   const editingRef=useRef(false);
   const screenRef=useRef("loading");
-
-  async function handleCreateTeam(name){
-    const newId=await createTeam(name);
-    setTeamId(newId);setTeamIdState(newId);setTeamMeta({name:name.trim()||"無名チーム",createdAt:Date.now()});
-    setRoster([]);setEvents([]);setAllResponses({});setAllLotteries({});
-    setDataLoading(true);
-    navigate("loading");
-    setTimeout(()=>loadAll(),100);
-    return newId;
-  }
-  async function handleJoinTeam(id){
-    const cleanId=id.trim().toUpperCase();
-    if(!cleanId)throw new Error("チームコードを入力してください");
-    const meta=await checkTeamExists(cleanId);
-    if(!meta)throw new Error("そのチームコードは存在しません");
-    setTeamId(cleanId);setTeamIdState(cleanId);setTeamMeta(meta);
-    setRoster([]);setEvents([]);setAllResponses({});setAllLotteries({});
-    setDataLoading(true);
-    navigate("loading");
-    setTimeout(()=>loadAll(),100);
-  }
-  function handleLeaveTeam(){
-    setTeamId(null);setTeamIdState(null);setTeamMeta(null);
-    setRoster([]);setEvents([]);setAllResponses({});setAllLotteries({});
-    navigate("landing");
-  }
-  async function handleUpdateTeamName(name){
-    if(!teamId)return;
-    const updated={...(teamMeta||{}),name:name.trim()||"無名チーム"};
-    await fbSet("meta",updated);
-    setTeamMeta(updated);
-  }
-  async function handleUpdateTeamSettings(settings){
-    if(!teamId)return;
-    const updated={...(teamMeta||{}),settings:{...(teamMeta?.settings||{}),...settings}};
-    await fbSet("meta",updated);
-    setTeamMeta(updated);
-  }
 
   function navigate(s){screenRef.current=s;setScreen(s);try{history.pushState({screen:s},"",`#${s}`)}catch(e){}}
 
@@ -1693,28 +707,7 @@ function App(){
 
   async function loadAll(){
     if(editingRef.current)return;
-    // No team selected: try auto-migration of legacy root data, else show landing
-    if(!TEAM_ID){
-      const legacyExists=await checkTeamExists("LEGACY");
-      if(legacyExists){
-        // Legacy team already migrated by someone else - just attach
-        setTeamId("LEGACY");setTeamIdState("LEGACY");setTeamMeta(legacyExists);
-      }else{
-        const legacyRoster=await fbRootGet("roster");
-        if(legacyRoster!==undefined&&legacyRoster!==null){
-          await migrateRootDataToTeam("LEGACY");
-          setTeamId("LEGACY");setTeamIdState("LEGACY");
-        }else{
-          setDataLoading(false);
-          if(screenRef.current==="loading")navigate("landing");
-          return;
-        }
-      }
-    }
     setSyncing(true);
-    // Load team meta
-    const meta=await fbGet("meta");
-    if(meta)setTeamMeta(meta);
     const ro=await fbGet("roster");const evList=await fbGet("events");
     if(ro===undefined||evList===undefined){setSyncing(false);setDataLoading(false);setErrorMsg("データベースへのアクセスに失敗しました。");if(screenRef.current==="loading")navigate("error");return}
     const r=Array.isArray(ro)?ro:(ro?Object.values(ro):[]);
@@ -1729,11 +722,9 @@ function App(){
       ]);
       setAllResponses(Object.fromEntries(resps));
       setAllLotteries(Object.fromEntries(lotts.filter(([_,v])=>v)));
-    }else{
-      setAllResponses({});setAllLotteries({});
     }
     setSyncing(false);setDataLoading(false);
-    if(screenRef.current==="loading"||screenRef.current==="error"||screenRef.current==="landing")navigate("home");
+    if(screenRef.current==="loading"||screenRef.current==="error")navigate("home");
   }
 
   useEffect(()=>{loadAll();const t=setInterval(loadAll,30000);return()=>clearInterval(t)},[]);
@@ -1752,19 +743,10 @@ function App(){
     setAllLotteries(p=>{const n={...p};delete n[id];return n});
     await Promise.all([fbDel(`responses/${id}`),fbDel(`lotteries/${id}`)]);
   }
-  async function handleSubmit(eventId,payload){
-    const{memberId,attending,parkingNeeded,carpoolCapacity}=payload;
-    const prev=(allResponses[eventId]||{})[memberId]||{};
-    const entry={...prev,attending,parkingNeeded,carpoolCapacity,at:Date.now()};
+  async function handleSubmit(eventId,{memberId,attending,parkingNeeded,carpoolCapacity}){
+    const entry={attending,parkingNeeded,carpoolCapacity,at:Date.now()};
     await fbSet(`responses/${eventId}/${memberId}`,entry);
-    setAllResponses(p=>({...p,[eventId]:{...(p[eventId]||{}),[memberId]:entry}}));
-  }
-  async function handleSaveCarpool(eventId,memberId,carpoolData){
-    const current=(allResponses[eventId]||{})[memberId];
-    if(!current){alert("先に出欠登録をしてください");return}
-    const updated={...current,...carpoolData,at:Date.now()};
-    await fbSet(`responses/${eventId}/${memberId}`,updated);
-    setAllResponses(p=>({...p,[eventId]:{...(p[eventId]||{}),[memberId]:updated}}));
+    setAllResponses(prev=>({...prev,[eventId]:{...(prev[eventId]||{}),[memberId]:entry}}));
   }
   async function handleResetResponses(eventId){
     await fbDel(`responses/${eventId}`);await fbDel(`lotteries/${eventId}`);
@@ -1777,53 +759,10 @@ function App(){
     const confirmed=getConfirmed(ev||{});
     const hp=Object.entries(resp).filter(([id,r])=>r.attending&&r.parkingNeeded&&!confirmed.includes(id)).map(([id])=>roster.find(r=>r.id===id)).filter(Boolean);
     if(hp.length===0){alert("駐車場を希望している人がいません");return}
-    setSelectedEventId(eventId);setLottParticipants(hp);setLottLimit(getLotterySlots(ev||{}));setLottIsRerun(false);setLottMode("parking");navigate("lottery");
+    setSelectedEventId(eventId);setLottParticipants(hp);navigate("lottery");
   }
-  async function handleReLottery(eventId){
-    const ev=events.find(e=>e.id===eventId);
-    const resp=allResponses[eventId]||{};
-    const lott=allLotteries[eventId];
-    if(!lott?.conducted){alert("初回抽選がまだ実施されていません");return}
-    const state=getDropouts(ev,resp,lott);
-    if(!state||state.openSlots===0){alert("空き枠がありません");return}
-    if(state.eligibleLosers.length===0){alert("再抽選の対象となる落選者がいません（全員欠席・駐車場不要等）");return}
-    const participants=state.eligibleLosers.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
-    setSelectedEventId(eventId);setLottParticipants(participants);setLottLimit(state.openSlots);setLottIsRerun(true);setLottMode("parking");navigate("lottery");
-  }
-  async function handleOptimizeCarpool(eventId){
-    const ev=events.find(e=>e.id===eventId);
-    const resp=allResponses[eventId]||{};
-    const plan=computeCarpoolPlan(ev,resp);
-    if(!plan){alert("参加者がいません");return}
-    const lott={conducted:true,conductedAt:Date.now(),winners:plan.selectedDrivers.map(d=>d.id),allParticipants:Object.keys(resp).filter(id=>resp[id].attending),carpoolPlan:{...plan,computedAt:Date.now()}};
-    await fbSet(`lotteries/${eventId}`,lott);
-    setAllLotteries(p=>({...p,[eventId]:lott}));
-  }
-  async function handleCarpoolAmida(eventId,meetingPoint,riderIds,capacity){
-    const participants=riderIds.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
-    if(participants.length===0){alert("乗合希望者がいません");return}
-    setSelectedEventId(eventId);setLottParticipants(participants);setLottLimit(capacity);setLottIsRerun(false);setLottMode("carpool");setLottCarpoolPoint(meetingPoint);navigate("lottery");
-  }
-  async function handleCompleteLottery(newWinners){
-    const prev=allLotteries[selectedEventId];
-    let result;
-    if(lottMode==="carpool"){
-      const carpoolAssignments={...(prev?.carpoolAssignments||{})};
-      carpoolAssignments[lottCarpoolPoint]=newWinners;
-      result={...(prev||{conducted:true,conductedAt:Date.now(),winners:[],allParticipants:[]}),carpoolAssignments};
-      await fbSet(`lotteries/${selectedEventId}`,result);
-      setAllLotteries(p=>({...p,[selectedEventId]:result}));
-      navigate("event");
-      return;
-    }
-    if(prev?.conducted&&lottIsRerun){
-      const prevWinners=prev.winners||[];
-      const resp=allResponses[selectedEventId]||{};
-      const stillIn=prevWinners.filter(id=>{const r=resp[id];return r&&r.attending&&r.parkingNeeded});
-      result={...prev,winners:[...stillIn,...newWinners],lastReLotteryAt:Date.now(),history:[...(prev.history||[{round:1,winners:prev.winners,at:prev.conductedAt}]),{round:(prev.history?.length||1)+1,winners:newWinners,at:Date.now()}]};
-    }else{
-      result={conducted:true,conductedAt:Date.now(),winners:newWinners,allParticipants:lottParticipants.map(p=>p.id)};
-    }
+  async function handleCompleteLottery(winners){
+    const result={conducted:true,conductedAt:Date.now(),winners};
     await fbSet(`lotteries/${selectedEventId}`,result);
     setAllLotteries(p=>({...p,[selectedEventId]:result}));
     navigate("results");
@@ -1833,27 +772,8 @@ function App(){
   const selResp=(selectedEventId&&allResponses[selectedEventId])||{};
   const selLott=(selectedEventId&&allLotteries[selectedEventId])||null;
 
-  if(screen==="landing")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff"}}>
-    <LandingScreen onCreate={handleCreateTeam} onJoin={handleJoinTeam}
-      onPrivacy={()=>navigate("privacy")} onTerms={()=>navigate("terms")}
-      onGlobalAdmin={()=>navigate(sessionStorage.getItem("global_admin")==="1"?"gadmin":"gadmin_login")}
-      maintenanceNotice={maintenanceNotice}/>
-  </div>);
-
-  if(screen==="gadmin_login")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff"}}>
-    <GlobalAdminLogin onLogin={()=>navigate("gadmin")} onBack={()=>navigate(teamId?"home":"landing")}/>
-  </div>);
-
-  if(screen==="gadmin")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff",padding:"24px 16px 80px"}}>
-    <GlobalAdminDashboard onBack={()=>navigate(teamId?"home":"landing")} onLogout={()=>navigate("landing")}/>
-  </div>);
-
-  if(screen==="privacy"||screen==="terms")return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff",padding:"24px 16px 80px"}}>
-    <LegalScreen type={screen} onBack={()=>navigate(teamId?"home":"landing")}/>
-  </div>);
-
   if(screen==="loading")return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
-    <div style={{textAlign:"center"}}><div style={{fontSize:48,color:C.limeLight,animation:"spFloat 1s ease-in-out infinite"}}>🏆</div><p style={{color:C.muted,marginTop:12,fontSize:14}}>読み込み中...</p></div>
+    <div style={{textAlign:"center"}}><div style={{fontSize:48,color:C.limeLight,animation:"spFloat 1s ease-in-out infinite"}}>⚽</div><p style={{color:C.muted,marginTop:12,fontSize:14}}>読み込み中...</p></div>
   </div>);
 
   if(screen==="error")return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -1869,19 +789,18 @@ function App(){
   return(<div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.bg} 0%,${C.bg2} 100%)`,color:"#fff",padding:"0 16px 80px",position:"relative"}}>
     {syncing&&<div style={{position:"fixed",top:12,right:12,background:"rgba(0,0,0,0.5)",color:C.limeLight,padding:"4px 8px",borderRadius:8,fontSize:11,fontWeight:700,zIndex:100,backdropFilter:"blur(4px)"}}>↻ 同期中</div>}
     <div style={{maxWidth:460,margin:"0 auto",paddingTop:24}}>
-      {screen==="home"&&<HomeScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries} onNav={navigate} onSelectEvent={setSelectedEventId} loading={dataLoading} teamMeta={teamMeta} maintenanceNotice={maintenanceNotice}/>}
+      {screen==="home"&&<HomeScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries} onNav={navigate} onSelectEvent={setSelectedEventId} loading={dataLoading}/>}
       {screen==="event"&&<EventScreen event={selEv} roster={roster} responses={selResp} lottery={selLott}
-        onBack={()=>navigate("home")} onSubmit={handleSubmit} onNav={navigate} onCarpoolAmida={handleCarpoolAmida} onSaveCarpool={handleSaveCarpool} onOptimizeCarpool={handleOptimizeCarpool} teamMeta={teamMeta}
+        onBack={()=>navigate("home")} onSubmit={handleSubmit} onNav={navigate}
       />}
       {screen==="admin"&&<AdminScreen roster={roster} events={events} allResponses={allResponses} allLotteries={allLotteries}
         onSelectEvent={setSelectedEventId} onSaveEvent={handleSaveEvent} onDeleteEvent={handleDeleteEvent}
-        onSaveRoster={handleSaveRoster} onRunLottery={handleRunLottery} onReLottery={handleReLottery} onResetResponses={handleResetResponses}
-        onBack={()=>navigate("home")} onNav={navigate}
-        teamId={teamId} teamMeta={teamMeta} onUpdateTeamName={handleUpdateTeamName} onLeaveTeam={handleLeaveTeam} onUpdateTeamSettings={handleUpdateTeamSettings}/>
+        onSaveRoster={handleSaveRoster} onRunLottery={handleRunLottery} onResetResponses={handleResetResponses}
+        onBack={()=>navigate("home")} onNav={navigate}/>
       }
-      {screen==="lottery"&&<LotteryScreen event={selEv} participants={lottParticipants} limit={lottLimit} isRerun={lottIsRerun} mode={lottMode} carpoolPoint={lottCarpoolPoint} onComplete={handleCompleteLottery} onBack={()=>navigate(lottMode==="carpool"?"event":"admin")}/>}
+      {screen==="lottery"&&<LotteryScreen event={selEv} participants={lottParticipants} limit={getLotterySlots(selEv||{})} onComplete={handleCompleteLottery} onBack={()=>navigate("admin")}/>}
       {screen==="results"&&<ResultsScreen event={selEv} roster={roster} responses={selResp} lottery={selLott}
-        onReLottery={handleReLottery} onBack={()=>navigate("home")}/>
+        onBack={()=>navigate("home")}/>
       }
     </div>
   </div>);
