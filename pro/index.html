@@ -332,6 +332,10 @@ function parseLineMessage(text){
   }).replace(/(?:am|AM|午前)\s*(\d{1,2})\s*[:時]?\s*(\d{0,2})/gi,(m,h,mi)=>{
     const hh=parseInt(h)%12;return `${pad2(hh)}:${pad2(parseInt(mi||"0"))}`;
   });
+  // 「X時半」→「X:30」（口語ショートハンド）
+  t=t.replace(/(\d{1,2})時半/g,"$1:30");
+  // 時刻系キーワード直後の助詞「は/が/に/を」を空白に置換（口語文「集合は8:30」「キックオフは9:30」対応）
+  t=t.replace(/(集合|キックオフ|KO|ko|試合開始|開始|終了|終了予定|解散|会場|場所|対戦相手|お相手|対戦|相手|本日の?相手)(?:は|が|に|を)(?=\S)/g,"$1 ");
   const validTime=(h,m)=>h>=0&&h<=23&&m>=0&&m<=59;
   const toHM=(h,m)=>`${pad2(h)}:${pad2(m)}`;
   // 日付: M/D, M月D日, M-D など
@@ -356,12 +360,16 @@ function parseLineMessage(text){
     result.notes=text.substring(schedMatchIdx).trim();
   }
   // スケジュール部分を除外したテキスト（対戦相手抽出用：「vs A」が予定欄に含まれてもタイトル化しない）
-  const tBeforeSched=schedMatchIdx>=0?text.substring(0,schedMatchIdx):text;
-  const tMainNorm=tBeforeSched
-    .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
-    .replace(/[：]/g,":").replace(/[／]/g,"/").replace(/[＝]/g,"=").replace(/[＠]/g,"@")
-    .replace(/[Ａ-Ｚａ-ｚ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
-    .replace(/^[\s■・▼▽◆◇●○◯◎★☆▶▷▪▫►]+/gm,"");
+  // t（既に正規化済み・半変換済み・助詞除去済み）からスケジュール部分を切り取る
+  // schedMatchIdx は原文 text 上の位置なので、t に対する正確な位置にはならない可能性があるが、
+  // スケジュール見出しは行頭マッチかつ前処理で位置がほぼ保存される（半変換・助詞置換はゼロ長変化または等長置換）ため流用可能
+  const tMainNorm=schedMatchIdx>=0?t.substring(0,Math.min(schedMatchIdx,t.length)):t;
+  // 語尾の口語表現を除去するクリーナー（対戦相手・会場の共通後処理）
+  const cleanName=(s)=>s.trim()
+    .replace(/[様さま]+$/,"")
+    .replace(/(?:でした|になります|となります|です|だ|なり|だよ|だと思います|になる予定)[。\.]?$/,"")
+    .replace(/[。\.，,、]+$/,"")
+    .trim();
   // リーグ戦・大会・杯などのタイトル検出（最優先）
   // 文字クラスを拡張：○●◯△□★☆- 等の記号も含む（「○○カップ」「U-10リーグ」等に対応）
   const leagueMatch=tMainNorm.match(/([^\s\n,、。「『【\(（\)）\[\]【】|=:：]+(?:リーグ|大会|杯|フェスタ|フェスティバル|トーナメント|カップ|交流戦))/);
@@ -377,8 +385,8 @@ function parseLineMessage(text){
     for(const re of vsPatterns){
       const m=tMainNorm.match(re);
       if(m){
-        const opp=m[1].trim().replace(/[様さま]+$/,"");
-        if(opp&&!["の","に","は","を","と","練習試合","TM"].includes(opp)){
+        const opp=cleanName(m[1]);
+        if(opp&&opp.length>=1&&!["の","に","は","を","と","練習試合","TM"].includes(opp)){
           result.opponent=opp;
           result.title=opp;
           break;
@@ -403,6 +411,7 @@ function parseLineMessage(text){
       let loc=m[1].trim().replace(/[「『【［\[\(]/g,"").replace(/[」』】］\]\)]/g,"");
       loc=loc.replace(/\s+[白黒紺青赤緑黄橙桃](?:ユニ|シャツ)?\s*$/,"").trim();
       loc=loc.replace(/\s*\d{1,2}[:時].*$/,"").trim(); // 末尾の時刻除去
+      loc=cleanName(loc); // 語尾の です/になります/。 除去
       if(loc.length>0&&loc.length<60){result.location=loc;break}
     }
   }
