@@ -288,57 +288,107 @@ function downloadICS(ev){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+// Googleカレンダー直接追加URL（ダウンロード不要、ブラウザでそのまま追加）
+function googleCalendarUrl(ev){
+  if(!ev.matchDate)return null;
+  const startTime=ev.meetTime||ev.kickoffTime;
+  const start=applyTime(ev.matchDate,startTime);
+  let end;
+  if(ev.endTime){end=applyTime(ev.matchDate,ev.endTime)}
+  else{end=new Date(start);end.setHours(end.getHours()+2)}
+  const summary=ev.opponent?`🏆 ${ev.title} vs ${ev.opponent}`:`🏆 ${ev.title}`;
+  const descLines=[];
+  if(ev.opponent)descLines.push(`対戦相手: ${ev.opponent}`);
+  if(ev.meetTime)descLines.push(`集合: ${ev.meetTime}`);
+  if(ev.kickoffTime)descLines.push(`KO: ${ev.kickoffTime}`);
+  if(ev.endTime)descLines.push(`終了予定: ${ev.endTime}`);
+  if(ev.uniformColor)descLines.push(`ユニフォーム: ${ev.uniformColor}`);
+  if(ev.notes)descLines.push(`備考: ${ev.notes}`);
+  if(ev.location)descLines.push(`地図: ${mapUrl(ev.location)}`);
+  const dates=`${fmtICSLocal(start)}/${fmtICSLocal(end)}`;
+  const params=new URLSearchParams({
+    action:"TEMPLATE",
+    text:summary,
+    dates,
+    details:descLines.join("\n"),
+    location:ev.location||"",
+    ctz:"Asia/Tokyo",
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
 function parseLineMessage(text){
   if(!text)return{};
   const result={};
-  const t=text.replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
-    .replace(/[：]/g,":").replace(/[／]/g,"/");
-  // 日付: M/D, M月D日 など
+  // 全角→半角の正規化（数字・記号・PM/AM）
+  let t=text
+    .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/[：]/g,":").replace(/[／]/g,"/").replace(/[～〜]/g,"-")
+    .replace(/[Ａ-Ｚａ-ｚ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0));
+  // PM/AM 表記を24時間化（ＰＭ１：００ → 13:00）
+  t=t.replace(/(?:pm|PM|午後)\s*(\d{1,2})\s*[:時]?\s*(\d{0,2})/gi,(m,h,mi)=>{
+    const hh=(parseInt(h)%12)+12;return ` ${hh}:${pad2(parseInt(mi||"0"))} `;
+  }).replace(/(?:am|AM|午前)\s*(\d{1,2})\s*[:時]?\s*(\d{0,2})/gi,(m,h,mi)=>{
+    const hh=parseInt(h)%12;return ` ${pad2(hh)}:${pad2(parseInt(mi||"0"))} `;
+  });
+  // 日付: M/D, M月D日, M-D など
   let dateMatch=t.match(/(\d{1,2})\s*[\/月\.\-]\s*(\d{1,2})(?:日)?/);
   let parsedDate=null;
   if(dateMatch){
     const m=parseInt(dateMatch[1]),d=parseInt(dateMatch[2]);
-    const now=new Date();
-    let y=now.getFullYear();
-    const candidate=new Date(y,m-1,d);
-    if(candidate<new Date(now.getTime()-86400000))y++;
-    parsedDate={y,m,d};
+    if(m>=1&&m<=12&&d>=1&&d<=31){
+      const now=new Date();
+      let y=now.getFullYear();
+      const candidate=new Date(y,m-1,d);
+      if(candidate<new Date(now.getTime()-86400000))y++;
+      parsedDate={y,m,d};
+    }
   }
-  // 対戦相手
-  const vsMatch=t.match(/(?:vs\.?\s+|VS\.?\s+|対戦相手\s*:?\s*|相手\s*:?\s*|対\s+)([^\s\n,、。\(（]+(?:\s+(?:FC|fc|サッカー|SC|サッカークラブ))?)/);
-  if(vsMatch)result.opponent=vsMatch[1].trim();
-  // 会場
-  const locMatch=t.match(/(?:会場\s*:?\s*|場所\s*:?\s*|@\s*)([^\n\(（,、]+?)(?=\s*(?:集合|キックオフ|KO|ko|ユニ|終了|解散|$|\n|時|分))/);
-  if(locMatch){
-    let loc=locMatch[1].trim();
-    loc=loc.replace(/[「『【［\[]/g,"").replace(/[」』】］\]]/g,"");
-    if(loc.length>0&&loc.length<60)result.location=loc;
+  // 対戦相手（「対戦」「相手」「vs」「対」「■相手」等を網羅）
+  const vsPatterns=[
+    /(?:対戦相手|対戦チーム|お相手|対戦|相手)\s*[:：・\-]?\s*([^\s\n,、。\(（様]+(?:FC|SC|サッカー|サッカークラブ)?)/,
+    /(?:vs\.?|VS\.?)\s*([^\s\n,、。\(（様]+(?:FC|SC|サッカー)?)/i,
+    /対\s+([^\s\n,、。\(（様]+(?:FC|SC|サッカー)?)/,
+  ];
+  for(const re of vsPatterns){const m=t.match(re);if(m){result.opponent=m[1].trim().replace(/[様さま]+$/,"");break}}
+  // 会場（「会場」「場所」「グラウンド」「@」「■会場」等）
+  const locPatterns=[
+    /(?:会場|場所|グラウンド|グランド)\s*[:：・\-]?\s*([^\n\(（,、]+?)(?=\s*(?:集合|キックオフ|KO|ko|ユニ|終了|解散|相手|対戦|$|\n))/,
+    /@\s*([^\n\(（,、\s]+)/,
+  ];
+  for(const re of locPatterns){
+    const m=t.match(re);
+    if(m){
+      let loc=m[1].trim().replace(/[「『【［\[\(]/g,"").replace(/[」』】］\]\)]/g,"");
+      // 末尾の「白」「ユニ」などのゴミ除去
+      loc=loc.replace(/\s+[白黒紺青赤緑黄橙桃](?:ユニ|シャツ)?\s*$/,"").trim();
+      if(loc.length>0&&loc.length<60){result.location=loc;break}
+    }
   }
   // 集合時刻
-  const meetMatch=t.match(/集合(?:は|が)?\s*[:\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?/);
+  const meetMatch=t.match(/集合(?:は|が|時刻)?\s*[:：\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?/);
   if(meetMatch){
     const h=parseInt(meetMatch[1]),m=parseInt(meetMatch[2]||"0");
-    result.meetTime=`${pad2(h)}:${pad2(m)}`;
+    if(h>=0&&h<=23&&m>=0&&m<=59)result.meetTime=`${pad2(h)}:${pad2(m)}`;
   }
   // キックオフ（KO先 or 時刻先 両対応）
-  let koMatch=t.match(/(?:KO|ko|キックオフ|試合開始)\s*[:\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?/);
+  let koMatch=t.match(/(?:KO|ko|キックオフ|試合開始|開始)\s*[:：\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?/);
   if(!koMatch)koMatch=t.match(/(\d{1,2})\s*[:時]\s*(\d{0,2})\s*(?:KO|ko|キックオフ|試合開始)/);
   if(koMatch){
     const h=parseInt(koMatch[1]),m=parseInt(koMatch[2]||"0");
-    result.kickoffTime=`${pad2(h)}:${pad2(m)}`;
+    if(h>=0&&h<=23&&m>=0&&m<=59)result.kickoffTime=`${pad2(h)}:${pad2(m)}`;
   }
   // 終了予定
-  const endMatch=t.match(/(?:終了|解散|終わり)\s*予?定?\s*[:\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?/);
+  const endMatch=t.match(/(?:終了|解散|終わり|終了予定)\s*予?定?\s*[:：\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?/);
   if(endMatch){
     const h=parseInt(endMatch[1]),m=parseInt(endMatch[2]||"0");
-    result.endTime=`${pad2(h)}:${pad2(m)}`;
+    if(h>=0&&h<=23&&m>=0&&m<=59)result.endTime=`${pad2(h)}:${pad2(m)}`;
   }
-  // ユニフォーム (color before ユニ first, then ユニ: pattern)
+  // ユニフォーム
   let uniMatch=t.match(/([白黒紺青赤緑黄橙桃])(?:ユニ|シャツ|の?ユニフォーム)/);
-  if(!uniMatch)uniMatch=t.match(/ユニ(?:フォーム)?\s*[:：\s]+([白黒紺青赤緑黄橙桃ピンクオレンジ]+|\S+)/);
+  if(!uniMatch)uniMatch=t.match(/(?:ユニ(?:フォーム)?|シャツ)\s*[:：\s]+([白黒紺青赤緑黄橙桃ピンクオレンジ]+|\S+)/);
   if(uniMatch){
     const v=uniMatch[1].trim();
-    if(!["で","に","の","は","を","は","と"].includes(v))result.uniformColor=v;
+    if(!["で","に","の","は","を","と"].includes(v))result.uniformColor=v;
   }
   // matchDate (combine with kickoff or meetTime or default 09:00)
   if(parsedDate){
@@ -848,7 +898,14 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
         <div style={{fontSize:11,color:C.dim,marginBottom:6}}>📎 資料リンク</div>
         {event.attachments.map(a=><a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" style={{display:"block",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"10px 12px",marginBottom:4,color:C.limeLight,fontSize:13,textDecoration:"none",fontWeight:700}}>🔗 {a.name||"リンク"}</a>)}
       </div>}
-      {event.matchDate&&<button onClick={()=>downloadICS(event)} style={{...S.btnSm,width:"100%",padding:"10px 16px",marginTop:4}}>📅 カレンダーに追加</button>}
+      {event.matchDate&&<div style={{marginTop:4}}>
+        <div style={{fontSize:11,color:C.dim,marginBottom:6}}>📅 カレンダーに追加</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <button onClick={()=>window.open(googleCalendarUrl(event),"_blank","noopener,noreferrer")} style={{...S.btnSm,flex:"1 1 140px",padding:"10px 12px"}}>🅖 Googleカレンダー</button>
+          <button onClick={()=>downloadICS(event)} style={{...S.btnSm,flex:"1 1 140px",padding:"10px 12px"}}>📥 .ics ダウンロード</button>
+        </div>
+        <div style={{fontSize:10,color:C.dim,marginTop:6,lineHeight:1.5}}>※ Googleカレンダーは新規タブで開いて「保存」を押すだけ。iPhone/Mac の標準カレンダーや Outlook は .ics ダウンロードをご利用ください</div>
+      </div>}
     </Accordion>}
 
     <Accordion title="🚗 駐車場" open={sectionOpen.parking} onToggle={()=>toggleSection("parking")} accent="rgba(147,197,253,0.3)" badge={lottery?.conducted?<Tag label="抽選済" color="lime"/>:null}>
@@ -1091,8 +1148,8 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
 
   useEffect(()=>{
     if(editEv){
-      const hasDetails=!!(editEv.opponent||editEv.location||editEv.kickoffTime||editEv.meetTime||editEv.endTime||editEv.uniformColor||editEv.notes||(editEv.attachments&&editEv.attachments.length));
-      setDetailsOpen(hasDetails);
+      // 試合要項は必須項目を含むため、常に開く（折りたたみ可だがデフォルトは開）
+      setDetailsOpen(true);
     }
   },[editEv?.id]);
 
@@ -1104,6 +1161,12 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
 
   async function saveEditEv(){
     if(!editEv.title.trim()){setEvErr("⚠️ タイトルを入力");return}
+    if(!editEv.matchDate){setEvErr("⚠️ 試合日時を入力（必須）");return}
+    if(!editEv.deadline){setEvErr("⚠️ 回答締切を入力（必須）");return}
+    if(!(editEv.opponent||"").trim()){setEvErr("⚠️ 試合要項：対戦相手を入力（必須）");setDetailsOpen(true);return}
+    if(!(editEv.location||"").trim()){setEvErr("⚠️ 試合要項：会場を入力（必須）");setDetailsOpen(true);return}
+    if(!editEv.meetTime){setEvErr("⚠️ 試合要項：集合時刻を入力（必須）");setDetailsOpen(true);return}
+    if(!editEv.kickoffTime){setEvErr("⚠️ 試合要項：キックオフ時刻を入力（必須）");setDetailsOpen(true);return}
     if(evGrades.length===0){setEvErr("⚠️ 参加対象を選択");return}
     await onSaveEvent({...editEv,parkingLimit:evLimit,confirmedParking:evConfirmed,inviteGrades:evGrades,_new:undefined});
     setEditEv(null);setEvDirty(false);flash("✅ 保存しました！")}
@@ -1165,18 +1228,19 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
       {parseOpen&&<div style={{marginTop:12}} className="fade-in">
         <p style={{fontSize:11,color:C.dim,marginBottom:8,lineHeight:1.5}}>コーチからの試合連絡（日時・対戦相手・会場・集合時刻・KO・ユニ等）をそのまま貼り付けて「解析」を押してください</p>
         <textarea value={parseInput} onChange={e=>setParseInput(e.target.value)} placeholder={"例：\n5/23(土) 9:00 KO\n会場：中央公園グラウンド\n対戦相手 鶴ヶ岡FC\n集合 8:00\n終了 11:00\nユニ：白"} rows={6} style={{...S.input,resize:"vertical",minHeight:90,fontFamily:"inherit",marginBottom:8}}/>
-        {parseFlash&&<p style={{fontSize:12,color:C.limeLight,textAlign:"center",marginBottom:8}}>{parseFlash}</p>}
+        {parseFlash&&<div style={{fontSize:12,color:parseFlash.startsWith("⚠️")?C.amber:C.limeLight,background:parseFlash.startsWith("⚠️")?"rgba(245,158,11,0.1)":"rgba(147,197,253,0.08)",border:`1px solid ${parseFlash.startsWith("⚠️")?"rgba(245,158,11,0.3)":"rgba(147,197,253,0.3)"}`,borderRadius:10,padding:"10px 12px",marginBottom:10,whiteSpace:"pre-line",lineHeight:1.6}}>{parseFlash}</div>}
         <Btn variant="yellow" onClick={()=>{
           const parsed=parseLineMessage(parseInput);
           const keys=Object.keys(parsed);
-          if(keys.length===0){setParseFlash("⚠️ 抽出できる項目がありませんでした");setTimeout(()=>setParseFlash(""),3000);return}
+          if(keys.length===0){setParseFlash("⚠️ 抽出できる項目がありませんでした。日時/会場/対戦/集合/KOなどのキーワードが見つかりません");return}
           keys.forEach(k=>updateEv(k,parsed[k]));
-          // Open match details accordion so user can verify
+          // 試合要項アコーディオンを開いてユーザーが確認できるようにする
           setDetailsOpen(true);
-          setParseFlash(`✅ ${keys.length}項目を自動入力: ${keys.join(", ")}`);
-          setTimeout(()=>setParseFlash(""),5000);
-          setParseInput("");setParseOpen(false);
+          const labelMap={matchDate:"📅 試合日時",opponent:"🆚 対戦相手",location:"📍 会場",meetTime:"⏰ 集合",kickoffTime:"🏆 KO",endTime:"🏁 終了",uniformColor:"👕 ユニ"};
+          const labels=keys.map(k=>labelMap[k]||k).join(" / ");
+          setParseFlash(`✅ ${keys.length}項目を自動入力しました\n${labels}\n下の「試合要項」をご確認のうえ、足りない項目があれば手動で入力してください。`);
         }}>✨ 解析して入力</Btn>
+        {parseInput&&<button onClick={()=>{setParseInput("");setParseFlash("")}} style={{...S.btnSm,width:"100%",marginTop:8,background:"rgba(255,255,255,0.05)"}}>🗑️ 入力欄をクリア</button>}
       </div>}
     </div>
 
@@ -1185,7 +1249,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
       <input value={editEv.title} onChange={e=>updateEv("title",e.target.value)} placeholder="例：土曜 練習試合" style={S.input} autoComplete="off"/>
     </div>
     {[["試合日時","matchDate"],["回答締切","deadline"]].map(([l,k])=><div key={k} style={S.card}>
-      <div style={{fontSize:12,color:C.dim,marginBottom:6}}>{l}（任意）</div>
+      <div style={{fontSize:12,color:C.dim,marginBottom:6}}>{l} <span style={{color:"#f87171",fontWeight:700}}>※必須</span></div>
       <input type="datetime-local" value={editEv[k]||""} onChange={e=>updateEv(k,e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
       {editEv[k]&&<button onClick={()=>updateEv(k,"")} style={{background:"none",border:"none",color:C.dim,fontSize:12,cursor:"pointer",marginTop:4}}>× クリア</button>}
     </div>)}
@@ -1217,32 +1281,32 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
 
     <div style={S.card}>
       <button onClick={()=>setDetailsOpen(o=>!o)} style={{background:"none",border:"none",color:"#fff",fontFamily:"inherit",width:"100%",textAlign:"left",cursor:"pointer",padding:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontSize:12,color:C.dim}}>📋 試合要項（任意）</div>
+        <div style={{fontSize:12,color:C.dim}}>📋 試合要項 <span style={{color:"#f87171",fontWeight:700}}>※必須項目あり</span></div>
         <div style={{fontSize:14,color:C.dim}}>{detailsOpen?"▲":"▼"}</div>
       </button>
       {detailsOpen&&<div style={{marginTop:12}} className="fade-in">
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🆚 対戦相手</div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🆚 対戦相手 <span style={{color:"#f87171",fontWeight:700}}>※必須</span></div>
           <input value={editEv.opponent||""} onChange={e=>updateEv("opponent",e.target.value)} placeholder="例：鶴ヶ岡FC" style={S.input} autoComplete="off"/>
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📍 会場</div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📍 会場 <span style={{color:"#f87171",fontWeight:700}}>※必須</span></div>
           <input value={editEv.location||""} onChange={e=>updateEv("location",e.target.value)} placeholder="例：中央公園グラウンド" style={S.input} autoComplete="off"/>
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⏰ 集合時刻</div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>⏰ 集合時刻 <span style={{color:"#f87171",fontWeight:700}}>※必須</span></div>
           <input type="time" value={editEv.meetTime||""} onChange={e=>updateEv("meetTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🏆 キックオフ</div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🏆 キックオフ <span style={{color:"#f87171",fontWeight:700}}>※必須</span></div>
           <input type="time" value={editEv.kickoffTime||""} onChange={e=>updateEv("kickoffTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🏁 終了予定</div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>🏁 終了予定（任意）</div>
           <input type="time" value={editEv.endTime||""} onChange={e=>updateEv("endTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>👕 ユニフォーム色</div>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>👕 ユニフォーム色（任意）</div>
           <input value={editEv.uniformColor||""} onChange={e=>updateEv("uniformColor",e.target.value)} placeholder="例：白 / 紺" style={S.input} autoComplete="off"/>
         </div>
         <div style={{marginBottom:10}}>
