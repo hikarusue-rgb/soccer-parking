@@ -1514,6 +1514,14 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
         <p style={{fontSize:11,color:C.dim,marginBottom:8,lineHeight:1.5}}>このチームから抜けて、別のチームに参加できます（データは削除されません）</p>
         <Btn variant="ghost" onClick={leaveTeam}>← チームから抜ける</Btn>
       </div>}
+      <div style={{...S.card,background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.35)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+          <span style={{fontSize:18}}>🔧</span>
+          <div style={{fontSize:13,fontWeight:900,color:C.amber}}>全チーム管理（サービス管理者向け）</div>
+        </div>
+        <p style={{fontSize:11,color:C.dim,marginBottom:10,lineHeight:1.5}}>全テナントの一覧・閲覧・操作ができます。パスワードが必要です。</p>
+        <button onClick={()=>onNav(sessionStorage.getItem("global_admin")==="1"?"gadmin":"gadmin_login")} style={{...S.btnSm,width:"100%",background:"rgba(245,158,11,0.2)",color:C.amber,border:"1px solid rgba(245,158,11,0.4)",padding:"10px 16px",fontWeight:700}}>🔧 全チーム管理を開く →</button>
+      </div>
       <div style={S.card}>
         <div style={{fontSize:12,color:C.dim,marginBottom:8}}>規約・ポリシー</div>
         <div style={{display:"flex",gap:8}}>
