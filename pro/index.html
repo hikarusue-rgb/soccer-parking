@@ -319,17 +319,21 @@ function googleCalendarUrl(ev){
 function parseLineMessage(text){
   if(!text)return{};
   const result={};
-  // 全角→半角の正規化（数字・記号・PM/AM）
+  // 全角→半角の正規化（数字・記号・PM/AM）+ 行頭の箇条書き記号を除去
   let t=text
     .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
-    .replace(/[：]/g,":").replace(/[／]/g,"/")
-    .replace(/[Ａ-Ｚａ-ｚ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0));
+    .replace(/[：]/g,":").replace(/[／]/g,"/").replace(/[＝]/g,"=").replace(/[＠]/g,"@")
+    .replace(/[Ａ-Ｚａ-ｚ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/^[\s■・▼▽◆◇●○◯◎★☆▶▷▪▫►]+/gm,""); // 行頭の箇条書き
   // PM/AM 表記を24時間化（ＰＭ１：００ → 13:00）
+  // 周囲のスペースは温存（時刻と次のキーワードの隣接性を保つ）
   t=t.replace(/(?:pm|PM|午後)\s*(\d{1,2})\s*[:時]?\s*(\d{0,2})/gi,(m,h,mi)=>{
-    const hh=(parseInt(h)%12)+12;return ` ${hh}:${pad2(parseInt(mi||"0"))} `;
+    const hh=(parseInt(h)%12)+12;return `${hh}:${pad2(parseInt(mi||"0"))}`;
   }).replace(/(?:am|AM|午前)\s*(\d{1,2})\s*[:時]?\s*(\d{0,2})/gi,(m,h,mi)=>{
-    const hh=parseInt(h)%12;return ` ${pad2(hh)}:${pad2(parseInt(mi||"0"))} `;
+    const hh=parseInt(h)%12;return `${pad2(hh)}:${pad2(parseInt(mi||"0"))}`;
   });
+  const validTime=(h,m)=>h>=0&&h<=23&&m>=0&&m<=59;
+  const toHM=(h,m)=>`${pad2(h)}:${pad2(m)}`;
   // 日付: M/D, M月D日, M-D など
   let dateMatch=t.match(/(\d{1,2})\s*[\/月\.\-]\s*(\d{1,2})(?:日)?/);
   let parsedDate=null;
@@ -343,86 +347,129 @@ function parseLineMessage(text){
       parsedDate={y,m,d};
     }
   }
-  // リーグ戦・大会・杯などのタイトル検出（最優先）
-  const leagueMatch=t.match(/([぀-ヿ一-鿿A-Za-z0-9ー]+(?:リーグ|大会|杯|フェスタ|フェスティバル|トーナメント|カップ|交流戦))/);
-  if(leagueMatch)result.title=leagueMatch[1].trim();
-  // スケジュール／予定 セクション → 備考
-  // 行頭にあるセクション見出しのみ拾う（「ブロックリーグスケジュールです」の途中ヒットを避ける）
-  const schedRegex=/(?:^|\n)\s*(スケジュール|タイムスケジュール|試合予定|対戦予定|試合順|タイテ)\s*\n/;
+  // スケジュール／予定 セクション → 備考（最優先で行頭マッチを探す）
+  const schedRegex=/(?:^|\n)\s*(スケジュール|タイムスケジュール|タイテ|タイムテーブル|試合予定|対戦予定|試合順|対戦表|試合スケジュール)\s*\n/;
   const schedMatchExec=schedRegex.exec(text);
   let schedMatchIdx=-1;
   if(schedMatchExec){
-    // 見出し行の開始位置に揃える
     schedMatchIdx=schedMatchExec.index+(schedMatchExec[0].match(/^\s*\n/)?schedMatchExec[0].indexOf(schedMatchExec[1]):0);
     result.notes=text.substring(schedMatchIdx).trim();
   }
-  // 対戦相手（単発試合の場合のみ、リーグ戦が検出されていなければ）
+  // スケジュール部分を除外したテキスト（対戦相手抽出用：「vs A」が予定欄に含まれてもタイトル化しない）
+  const tBeforeSched=schedMatchIdx>=0?text.substring(0,schedMatchIdx):text;
+  const tMainNorm=tBeforeSched
+    .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/[：]/g,":").replace(/[／]/g,"/").replace(/[＝]/g,"=").replace(/[＠]/g,"@")
+    .replace(/[Ａ-Ｚａ-ｚ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/^[\s■・▼▽◆◇●○◯◎★☆▶▷▪▫►]+/gm,"");
+  // リーグ戦・大会・杯などのタイトル検出（最優先）
+  // 文字クラスを拡張：○●◯△□★☆- 等の記号も含む（「○○カップ」「U-10リーグ」等に対応）
+  const leagueMatch=tMainNorm.match(/([^\s\n,、。「『【\(（\)）\[\]【】|=:：]+(?:リーグ|大会|杯|フェスタ|フェスティバル|トーナメント|カップ|交流戦))/);
+  if(leagueMatch)result.title=leagueMatch[1].trim();
+  // 対戦相手（リーグ戦未検出時のみ）：スケジュール部分を除いたテキストから抽出
   if(!result.title){
     const vsPatterns=[
-      /(?:対戦相手|対戦チーム|お相手|対戦|相手)\s*[:：・\-]?\s*([^\s\n,、。\(（様]+(?:FC|SC|サッカー|サッカークラブ)?)/,
+      /(?:対戦相手|対戦チーム|お相手|対戦|相手|本日の?相手)\s*[:：・\-=]?\s*([^\s\n,、。\(（様]+(?:FC|SC|サッカー|サッカークラブ)?)/,
       /(?:vs\.?|VS\.?)\s*([^\s\n,、。\(（様]+(?:FC|SC|サッカー)?)/i,
+      /([^\s\n,、。\(（]+(?:FC|SC))\s*戦/, // 「太陽FC戦」
       /対\s+([^\s\n,、。\(（様]+(?:FC|SC|サッカー)?)/,
     ];
     for(const re of vsPatterns){
-      const m=t.match(re);
+      const m=tMainNorm.match(re);
       if(m){
         const opp=m[1].trim().replace(/[様さま]+$/,"");
-        result.opponent=opp;
-        result.title=opp; // 単発試合：タイトル＝対戦相手
-        break;
+        if(opp&&!["の","に","は","を","と","練習試合","TM"].includes(opp)){
+          result.opponent=opp;
+          result.title=opp;
+          break;
+        }
       }
     }
   }
-  // 会場（「会場」「場所」「グラウンド」「@」「■会場」等）
+  // タイトルのフォールバック：「練習試合」「TM」キーワード
+  if(!result.title){
+    if(/練習試合/.test(tMainNorm))result.title="練習試合";
+    else if(/\bTM\b/.test(tMainNorm)||/(?:^|\s)TM(?:$|\s)/.test(tMainNorm))result.title="TM";
+  }
+  // 会場
   const locPatterns=[
-    /(?:会場|場所|グラウンド|グランド)\s*[:：・\-]?\s*([^\n\(（,、]+?)(?=\s*(?:集合|キックオフ|KO|ko|ユニ|終了|解散|相手|対戦|配車|$|\n))/,
+    /(?:会場|場所|於)\s*[:：・\-=]?\s*([^\n\(（,、]+?)(?=\s*(?:集合|キックオフ|KO|ko|ユニ|終了|解散|相手|対戦|配車|vs|VS|対\s|$|\n|時|\d))/,
     /@\s*([^\n\(（,、\s]+)/,
+    /(?:^|\n)\s*([^\s\n,、]+(?:グラウンド|グランド|公園|小学校|中学校|高校|球場|サッカー場|フィールド|スタジアム|体育館|G|ｸﾞﾗｳﾝﾄﾞ))(?=\s|$|\n)/,
   ];
   for(const re of locPatterns){
-    const m=t.match(re);
+    const m=tMainNorm.match(re);
     if(m){
       let loc=m[1].trim().replace(/[「『【［\[\(]/g,"").replace(/[」』】］\]\)]/g,"");
-      // 末尾の「白」「ユニ」などのゴミ除去
       loc=loc.replace(/\s+[白黒紺青赤緑黄橙桃](?:ユニ|シャツ)?\s*$/,"").trim();
+      loc=loc.replace(/\s*\d{1,2}[:時].*$/,"").trim(); // 末尾の時刻除去
       if(loc.length>0&&loc.length<60){result.location=loc;break}
     }
   }
-  // 集合時刻（「集合 8時」「集合:8:00」「集合 8時30分」等に対応）
-  const meetMatch=t.match(/集合(?:は|が|時刻)?\s*[:：\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?\s*分?/);
-  if(meetMatch){
-    const h=parseInt(meetMatch[1]),m=parseInt(meetMatch[2]||"0");
-    if(h>=0&&h<=23&&m>=0&&m<=59)result.meetTime=`${pad2(h)}:${pad2(m)}`;
+  // 集合時刻（優先順位順に試行）
+  const meetPatterns=[
+    /(\d{1,2})[:時](\d{0,2})分?集合/, // [1] 「9:00集合」「9時集合」（スペース無し）
+    /集合(?:は|が|時刻)?[ \t]*[:：\s=]*[ \t]*(\d{1,2})[:時](?:(\d{1,2})\s*分?)?(?![:\d時])/, // [2] 「集合 8:30」「集合8時30分」
+    /(\d{1,2})[:時](\d{0,2})分?[ \t]+集合/, // [3] 「9:00 集合」「8時 集合」（改行不可）
+  ];
+  for(const re of meetPatterns){
+    const m=t.match(re);
+    if(m){
+      const h=parseInt(m[1]),mi=parseInt(m[2]||"0");
+      if(validTime(h,mi)){result.meetTime=toHM(h,mi);break}
+    }
   }
-  // キックオフ
-  // 1) 明示パターン「KO 9:00」「キックオフ 9時」
-  let koMatch=t.match(/(?:KO|ko|キックオフ|試合開始|開始)\s*[:：\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?\s*分?/);
-  // 2) 「9:00 KO」「9時KO」
-  if(!koMatch)koMatch=t.match(/(\d{1,2})\s*[:時]\s*(\d{0,2})\s*分?\s*(?:KO|ko|キックオフ|試合開始)/);
-  // 3) スケジュール下の最初の「X時〜」「X時から」を kickoff として採用
-  if(!koMatch&&schedMatchIdx>=0){
-    const afterSched=t.substring(schedMatchIdx);
-    koMatch=afterSched.match(/(\d{1,2})\s*時\s*(\d{0,2})\s*分?\s*[〜～\-から]/);
+  // 時刻レンジ「9:30-12:00」「10:30〜12:30」「9時〜12時」（KO + 終了として採用）
+  // 日付のM-D（X/Y）と混同しないため、両側がXX:XX形式か X時 形式に限定
+  const rangePatterns=[
+    /(\d{1,2}):(\d{2})\s*[-〜～]\s*(\d{1,2}):(\d{2})/,
+    /(\d{1,2})\s*時\s*(\d{0,2})\s*分?\s*[-〜～]\s*(\d{1,2})\s*時\s*(\d{0,2})\s*分?/,
+  ];
+  let rangeMatch=null;
+  for(const re of rangePatterns){const m=t.match(re);if(m){rangeMatch=m;break}}
+  if(rangeMatch){
+    const h1=parseInt(rangeMatch[1]),m1=parseInt(rangeMatch[2]||"0"),h2=parseInt(rangeMatch[3]),m2=parseInt(rangeMatch[4]||"0");
+    if(validTime(h1,m1)&&validTime(h2,m2)){
+      result.kickoffTime=toHM(h1,m1);
+      result.endTime=toHM(h2,m2);
+    }
   }
-  // 4) それでも見つからなければ単独の「X時〜」「X時から」
-  if(!koMatch)koMatch=t.match(/(\d{1,2})\s*時\s*(\d{0,2})\s*分?\s*[〜～から]/);
-  if(koMatch){
-    const h=parseInt(koMatch[1]),m=parseInt(koMatch[2]||"0");
-    if(h>=0&&h<=23&&m>=0&&m<=59)result.kickoffTime=`${pad2(h)}:${pad2(m)}`;
+  // キックオフ（レンジで取れていなければ）
+  if(!result.kickoffTime){
+    const koPatterns=[
+      /(\d{1,2})[:時](\d{0,2})分?(?:KO|ko|キックオフ|試合開始|開始)/, // [1] 「9:00KO」「9時KO」（スペース無し）
+      /(?:KO|ko|キックオフ|試合開始|開始)[ \t]*[:：\s=]*[ \t]*(\d{1,2})[:時](?:(\d{1,2})\s*分?)?(?![:\d時])/, // [2] 「KO 9:00」
+      /(\d{1,2})[:時](\d{0,2})分?[ \t]+(?:KO|ko|キックオフ|試合開始|開始)/, // [3] 「9:00 KO」「9時 開始」（改行不可）
+    ];
+    let koMatch=null;
+    for(const re of koPatterns){const m=t.match(re);if(m){koMatch=m;break}}
+    // スケジュール直後の最初の「X時〜」「X:XX〜」を採用
+    if(!koMatch&&schedMatchIdx>=0){
+      const afterSched=t.substring(schedMatchIdx);
+      koMatch=afterSched.match(/(\d{1,2})[:時](\d{0,2})\s*分?\s*[〜～\-から]/);
+    }
+    if(!koMatch)koMatch=t.match(/(\d{1,2})[:時](\d{0,2})\s*分?\s*[〜～から]/);
+    if(koMatch){
+      const h=parseInt(koMatch[1]),m=parseInt(koMatch[2]||"0");
+      if(validTime(h,m))result.kickoffTime=toHM(h,m);
+    }
   }
-  // 終了予定
-  const endMatch=t.match(/(?:終了|解散|終わり|終了予定)\s*予?定?\s*[:：\s]*(\d{1,2})\s*[:時]\s*(\d{1,2})?\s*分?/);
-  if(endMatch){
-    const h=parseInt(endMatch[1]),m=parseInt(endMatch[2]||"0");
-    if(h>=0&&h<=23&&m>=0&&m<=59)result.endTime=`${pad2(h)}:${pad2(m)}`;
+  // 終了予定（レンジで取れていなければ）
+  if(!result.endTime){
+    const endMatch=t.match(/(?:終了|解散|終わり|終了予定)\s*予?定?\s*[:：\s=]*(\d{1,2})\s*[:時]\s*(\d{0,2})\s*分?/);
+    if(endMatch){
+      const h=parseInt(endMatch[1]),m=parseInt(endMatch[2]||"0");
+      if(validTime(h,m))result.endTime=toHM(h,m);
+    }
   }
   // ユニフォーム
   let uniMatch=t.match(/([白黒紺青赤緑黄橙桃])(?:ユニ|シャツ|の?ユニフォーム)/);
-  if(!uniMatch)uniMatch=t.match(/(?:ユニ(?:フォーム)?|シャツ)\s*[:：\s]+([白黒紺青赤緑黄橙桃ピンクオレンジ]+|\S+)/);
+  if(!uniMatch)uniMatch=t.match(/(?:ユニ(?:フォーム)?|シャツ)\s*[:：\s=]+([白黒紺青赤緑黄橙桃ピンクオレンジ]+|\S+)/);
   if(uniMatch){
     const v=uniMatch[1].trim();
     if(!["で","に","の","は","を","と"].includes(v))result.uniformColor=v;
   }
-  // matchDate (combine with kickoff or meetTime or default 09:00)
+  // matchDate
   if(parsedDate){
     const tm=result.kickoffTime||result.meetTime||"09:00";
     result.matchDate=`${parsedDate.y}-${pad2(parsedDate.m)}-${pad2(parsedDate.d)}T${tm}`;
