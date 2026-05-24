@@ -800,11 +800,20 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
   const now=new Date();
   const sortedAsc=[...events].sort((a,b)=>new Date(a.matchDate||"2099-12-31")-new Date(b.matchDate||"2099-12-31"));
   const future=sortedAsc.filter(e=>!e.matchDate||new Date(e.matchDate)>=new Date(now-86400000));
-  const featured=future[0]||null;
-  const upcomingOthers=future.slice(1);
+  // 今週末（日曜日）と翌週末を計算（今日が含まれる週の日曜 23:59:59、その7日後）
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const dow=today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const endOfThisWeek=new Date(today);
+  endOfThisWeek.setDate(today.getDate()+(6-dow)); // 今週の土曜日
+  endOfThisWeek.setHours(23,59,59,999);
+  const endOfNextWeek=new Date(endOfThisWeek);
+  endOfNextWeek.setDate(endOfNextWeek.getDate()+7); // 翌週の土曜日
+  const thisWeek=future.filter(e=>e.matchDate&&new Date(e.matchDate)<=endOfThisWeek);
+  const nextWeek=future.filter(e=>e.matchDate&&new Date(e.matchDate)>endOfThisWeek&&new Date(e.matchDate)<=endOfNextWeek);
+  const beyondTwoWeeks=future.filter(e=>!e.matchDate||new Date(e.matchDate)>endOfNextWeek);
   const archive=[...events].filter(e=>e.matchDate&&new Date(e.matchDate)<new Date(now-86400000)).sort((a,b)=>new Date(b.matchDate)-new Date(a.matchDate));
   const[showArchive,setShowArchive]=useState(false);
-  const[showUpcoming,setShowUpcoming]=useState(false);
+  const[showBeyond,setShowBeyond]=useState(false);
 
   function renderEvent(ev){
     const er=getEventRoster(roster,ev);
@@ -858,24 +867,31 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
     </div>
     {maintenanceNotice&&<MaintenanceBanner notice={maintenanceNotice} style={{marginBottom:16}}/>}
     {loading?<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>読み込み中...</div>
-    :!featured&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
+    :thisWeek.length===0&&nextWeek.length===0&&beyondTwoWeeks.length===0&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
       <div style={{fontSize:40,marginBottom:12}}>📅</div>
       <p style={{color:C.muted,marginBottom:6}}>試合がまだ登録されていません</p>
       <p style={{color:C.dim,fontSize:12}}>管理者が試合を追加するまでお待ちください</p>
     </div>
     :<>
-      {featured&&<>
+      <div style={{marginBottom:8}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:4}}>
           <span style={{fontSize:18}}>🌟</span>
-          <span style={{fontSize:13,fontWeight:900,color:C.limeLight}}>次の試合</span>
+          <span style={{fontSize:13,fontWeight:900,color:C.limeLight}}>今週の試合（〜{pad2(endOfThisWeek.getMonth()+1)}/{pad2(endOfThisWeek.getDate())}）</span>
         </div>
-        {renderEvent(featured)}
-      </>}
-      {upcomingOthers.length>0&&<div style={{marginTop:16}}>
-        <button onClick={()=>setShowUpcoming(!showUpcoming)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 24px",color:"rgba(255,255,255,0.55)",fontSize:13,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
-          📅 今後の試合 ({upcomingOthers.length}件) {showUpcoming?"▲":"▼"}
+        {thisWeek.length>0?thisWeek.map(renderEvent):<div style={{...S.card,textAlign:"center",padding:"16px",color:C.dim,fontSize:12}}>今週の試合はありません</div>}
+      </div>
+      <div style={{marginTop:16,marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:4}}>
+          <span style={{fontSize:18}}>📅</span>
+          <span style={{fontSize:13,fontWeight:900,color:C.sky}}>翌週の試合（〜{pad2(endOfNextWeek.getMonth()+1)}/{pad2(endOfNextWeek.getDate())}）</span>
+        </div>
+        {nextWeek.length>0?nextWeek.map(renderEvent):<div style={{...S.card,textAlign:"center",padding:"16px",color:C.dim,fontSize:12}}>翌週の試合はありません</div>}
+      </div>
+      {beyondTwoWeeks.length>0&&<div style={{marginTop:16}}>
+        <button onClick={()=>setShowBeyond(!showBeyond)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 24px",color:"rgba(255,255,255,0.55)",fontSize:13,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
+          📅 それ以降の試合 ({beyondTwoWeeks.length}件) {showBeyond?"▲":"▼"}
         </button>
-        {showUpcoming&&<div style={{marginTop:8}}>{upcomingOthers.map(renderEvent)}</div>}
+        {showBeyond&&<div style={{marginTop:8}}>{beyondTwoWeeks.map(renderEvent)}</div>}
       </div>}
       {archive.length>0&&<div style={{marginTop:16}}>
         <button onClick={()=>setShowArchive(!showArchive)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 24px",color:"rgba(255,255,255,0.35)",fontSize:13,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
@@ -1005,7 +1021,8 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       <div style={{fontSize:13,whiteSpace:"pre-wrap",lineHeight:1.5,color:"#fbbf24"}}>{event.changeReason}</div>
     </div>}
 
-    {hasYokou&&<Accordion title="📋 要項" open={sectionOpen.yokou} onToggle={()=>toggleSection("yokou")} accent="rgba(56,189,248,0.3)">
+    <div style={{background:"rgba(56,189,248,0.05)",border:"1px solid rgba(56,189,248,0.3)",borderRadius:16,marginBottom:12,padding:"14px 16px"}}>
+      <div style={{fontWeight:900,fontSize:14,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>📋 要項</div>
       {event.opponent&&event.opponent!==event.title&&<div style={{marginBottom:10}}>
         <div style={{fontSize:11,color:C.dim,marginBottom:2}}>🆚 対戦相手</div>
         <div style={{fontSize:15,fontWeight:700}}>{event.opponent}</div>
@@ -1046,7 +1063,8 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
         </div>
         <div style={{fontSize:10,color:C.dim,marginTop:6,lineHeight:1.5}}>※ Googleカレンダーは新規タブで開いて「保存」を押すだけ。iPhone/Mac の標準カレンダーや Outlook は .ics ダウンロードをご利用ください</div>
       </div>}
-    </Accordion>}
+      {!hasYokou&&<p style={{color:C.dim,fontSize:12,textAlign:"center",padding:"6px 0"}}>※ 要項はまだ未入力です</p>}
+    </div>
 
     <Accordion title="🚗 駐車場" open={sectionOpen.parking} onToggle={()=>toggleSection("parking")} accent="rgba(147,197,253,0.3)" badge={lottery?.conducted?<Tag label="抽選済" color="lime"/>:null}>
     <div style={{display:"flex",gap:8,marginBottom:12}}>
@@ -1306,10 +1324,14 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
   function startNew(){const id=uid();setEditEv({_new:true,id,title:"",matchDate:"",deadline:"",parkingLimit:5});setEvLimit(5);setEvConfirmed([]);setEvGrades([...allGrades]);setEvErr("");setEvDirty(false)}
   function autoDeadlineFromMatch(matchDate){
     if(!matchDate)return"";
-    const d=new Date(matchDate);
-    if(isNaN(d.getTime()))return"";
+    // "YYYY-MM-DDTHH:MM" の日付部分だけを抽出（タイムゾーン依存を避ける）
+    const m=String(matchDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(!m)return"";
+    const y=parseInt(m[1],10),mo=parseInt(m[2],10),dy=parseInt(m[3],10);
+    // 試合日の正午でDateを作って2日減算（DST/タイムゾーン端での誤差を避ける）
+    const d=new Date(y,mo-1,dy,12,0,0,0);
     d.setDate(d.getDate()-2);
-    d.setHours(17,0,0,0);
+    // 出力は必ず 17:00 固定
     return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T17:00`;
   }
   function updateEv(f,v){
@@ -1430,11 +1452,8 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
     </div>
 
     <div style={S.card}>
-      <button onClick={()=>setDetailsOpen(o=>!o)} style={{background:"none",border:"none",color:"#fff",fontFamily:"inherit",width:"100%",textAlign:"left",cursor:"pointer",padding:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontSize:12,color:C.dim}}>📋 試合要項 <span style={{color:"#f87171",fontWeight:700}}>※必須項目あり</span></div>
-        <div style={{fontSize:14,color:C.dim}}>{detailsOpen?"▲":"▼"}</div>
-      </button>
-      {detailsOpen&&<div style={{marginTop:12}} className="fade-in">
+      <div style={{fontSize:13,fontWeight:900,marginBottom:12,display:"flex",alignItems:"center",gap:6}}>📋 試合要項 <span style={{color:"#f87171",fontWeight:700,fontSize:11}}>※必須項目あり</span></div>
+      <div className="fade-in">
         <div style={{marginBottom:10}}>
           <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📅 試合日時 <span style={{color:"#f87171",fontWeight:700}}>※必須</span></div>
           <input type="datetime-local" value={editEv.matchDate||""} onChange={e=>updateEv("matchDate",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
@@ -1510,7 +1529,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
           </div>
           <div style={{fontSize:10,color:C.dim,marginTop:6,lineHeight:1.5}}>※ Googleドライブの場合は「リンクを知っている全員」共有に設定してから貼り付けてください</div>
         </div>
-      </div>}
+      </div>
     </div>
 
     <div style={S.card}>
@@ -1577,6 +1596,15 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
     <ErrMsg msg={evErr}/>
     <Btn onClick={saveEditEv} style={{marginBottom:8}}>💾 保存する</Btn>
     <Btn variant="ghost" onClick={cancelEditEv}>キャンセル</Btn>
+    {modal&&<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+      <div style={{background:"#1a2e58",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:24,width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.5)"}}>
+        <p style={{color:"#fff",marginBottom:24,fontSize:15,fontWeight:700,whiteSpace:"pre-wrap",lineHeight:1.6}}>{modal.m}</p>
+        <div style={{display:"flex",gap:12}}>
+          <Btn variant="ghost" onClick={modal.no} style={{flex:1}}>キャンセル</Btn>
+          <Btn onClick={modal.ok} style={{flex:1}}>OK</Btn>
+        </div>
+      </div>
+    </div>}
   </div>);
 
   return(<div>
