@@ -114,9 +114,16 @@ function getEventRoster(roster,ev){const g=ev.inviteGrades||[...new Set(roster.m
 function getConfirmed(ev){return ev.confirmedParking||[]}
 function getLotterySlots(ev){return Math.max(0,(ev.parkingLimit||0)-getConfirmed(ev).length)}
 function getEventMode(ev){return ev?.mode||(ev?.carpoolEnabled?"carpool":"simple")}
+const DEFAULT_UNIFORM_OPTIONS=["白","紺","青","赤","黒","黄","緑","ピンク","オレンジ"];
 function getTeamSettings(meta){
   const s=meta?.settings||{};
-  return{gasPrice:s.gasPrice??170,fuelEconomy:s.fuelEconomy??10,handlingFee:s.handlingFee??0,...s};
+  return{
+    ...s,
+    gasPrice:s.gasPrice??170,
+    fuelEconomy:s.fuelEconomy??10,
+    handlingFee:s.handlingFee??0,
+    uniformOptions:(Array.isArray(s.uniformOptions)&&s.uniformOptions.length>0)?s.uniformOptions:DEFAULT_UNIFORM_OPTIONS
+  };
 }
 function computeDriverCost(ev,settings,numPassengers){
   if(!ev||!ev.roundTripKm)return null;
@@ -255,7 +262,7 @@ function genICS(ev){
   if(ev.meetTime)descLines.push(`集合: ${ev.meetTime}`);
   if(ev.kickoffTime)descLines.push(`KO: ${ev.kickoffTime}`);
   if(ev.endTime)descLines.push(`終了予定: ${ev.endTime}`);
-  if(ev.uniformColor)descLines.push(`ユニフォーム: ${ev.uniformColor}`);
+  if(hasUniform(ev))descLines.push(`ユニフォーム: ${fmtUniform(ev)}`);
   if(ev.notes)descLines.push(`備考: ${ev.notes}`);
   if(ev.location)descLines.push(`地図: ${mapUrl(ev.location)}`);
   const esc=(s)=>String(s).replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/,/g,"\\,").replace(/;/g,"\\;");
@@ -304,7 +311,7 @@ function googleCalendarUrl(ev){
   if(ev.meetTime)descLines.push(`集合: ${ev.meetTime}`);
   if(ev.kickoffTime)descLines.push(`KO: ${ev.kickoffTime}`);
   if(ev.endTime)descLines.push(`終了予定: ${ev.endTime}`);
-  if(ev.uniformColor)descLines.push(`ユニフォーム: ${ev.uniformColor}`);
+  if(hasUniform(ev))descLines.push(`ユニフォーム: ${fmtUniform(ev)}`);
   if(ev.notes)descLines.push(`備考: ${ev.notes}`);
   if(ev.location)descLines.push(`地図: ${mapUrl(ev.location)}`);
   const dates=`${fmtICSLocal(start)}/${fmtICSLocal(end)}`;
@@ -473,12 +480,25 @@ function parseLineMessage(text){
       if(validTime(h,m))result.endTime=toHM(h,m);
     }
   }
-  // ユニフォーム
-  let uniMatch=t.match(/([白黒紺青赤緑黄橙桃])(?:ユニ|シャツ|の?ユニフォーム)/);
-  if(!uniMatch)uniMatch=t.match(/(?:ユニ(?:フォーム)?|シャツ)\s*[:：\s=]+([白黒紺青赤緑黄橙桃ピンクオレンジ]+|\S+)/);
-  if(uniMatch){
-    const v=uniMatch[1].trim();
-    if(!["で","に","の","は","を","と"].includes(v))result.uniformColor=v;
+  // ユニフォーム（3要素：「上:白 下:黒 靴下:白」形式 → 個別 / 単色 → 全部に同色）
+  const COLOR_CHARS="白黒紺青赤緑黄橙桃ピンクオレンジ";
+  const colorPat=`[${COLOR_CHARS}]+`;
+  const topPat=new RegExp(`(?:上|シャツ|トップス)\\s*[:：\\s=]*(${colorPat})`);
+  const botPat=new RegExp(`(?:下|パンツ|ズボン|ショーツ|ボトムス)\\s*[:：\\s=]*(${colorPat})`);
+  const sockPat=new RegExp(`(?:靴下|ソックス|くつした|ストッキング)\\s*[:：\\s=]*(${colorPat})`);
+  const mTop=t.match(topPat),mBot=t.match(botPat),mSock=t.match(sockPat);
+  if(mTop)result.uniformTop=mTop[1];
+  if(mBot)result.uniformBottom=mBot[1];
+  if(mSock)result.uniformSocks=mSock[1];
+  if(!mTop&&!mBot&&!mSock){
+    let uniMatch=t.match(/([白黒紺青赤緑黄橙桃])(?:ユニ|シャツ|の?ユニフォーム)/);
+    if(!uniMatch)uniMatch=t.match(/(?:ユニ(?:フォーム)?|シャツ)\s*[:：\s=]+([白黒紺青赤緑黄橙桃ピンクオレンジ]+|\S+)/);
+    if(uniMatch){
+      const v=uniMatch[1].trim();
+      if(!["で","に","の","は","を","と"].includes(v)){
+        result.uniformTop=v;result.uniformBottom=v;result.uniformSocks=v;
+      }
+    }
   }
   // matchDate
   if(parsedDate){
@@ -486,6 +506,23 @@ function parseLineMessage(text){
     result.matchDate=`${parsedDate.y}-${pad2(parsedDate.m)}-${pad2(parsedDate.d)}T${tm}`;
   }
   return result;
+}
+function fmtChangeReasonBanner(ev){
+  if(!ev||!ev.changeReason)return"";
+  return `☔ 【変更のお知らせ】\n${ev.changeReason}\n━━━━━━━━━━━━`;
+}
+function hasUniform(ev){return !!(ev&&(ev.uniformTop||ev.uniformBottom||ev.uniformSocks||ev.uniformColor))}
+function fmtUniform(ev){
+  if(!ev)return"";
+  const t=ev.uniformTop,b=ev.uniformBottom,s=ev.uniformSocks;
+  if(t||b||s){
+    // 全て同じならまとめて表示
+    if(t&&b&&s&&t===b&&b===s)return `${t}（上下靴下とも）`;
+    return `上:${t||"—"} ／ 下:${b||"—"} ／ 靴下:${s||"—"}`;
+  }
+  // 後方互換: 旧 uniformColor
+  if(ev.uniformColor)return ev.uniformColor;
+  return"";
 }
 function fmtMatchDetails(ev){
   const lines=[];
@@ -501,7 +538,7 @@ function fmtMatchDetails(ev){
     if(ev.endTime)parts.push(`終了${ev.endTime}`);
     lines.push(`⏰ ${parts.join(" / ")}`);
   }
-  if(ev.uniformColor)lines.push(`👕 ${ev.uniformColor}`);
+  if(hasUniform(ev))lines.push(`👕 ${fmtUniform(ev)}`);
   if(ev.notes)lines.push(`📝 ${ev.notes}`);
   if(ev.attachments&&ev.attachments.length){
     lines.push(`📎 資料:`);
@@ -786,17 +823,21 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
     else if(isPast){badge=<Tag label="締切済" color="gray"/>}
     else if(tl){badge=<Tag label={`⏱ ${tl}`} color="sky"/>}
     return(
-      <div key={ev.id} className="fade-in" style={{...S.card,borderColor:bc,cursor:"pointer"}} onClick={()=>{onSelectEvent(ev.id);onNav("event")}}>
+      <div key={ev.id} className="fade-in" style={{...S.card,borderColor:ev.changeReason?"rgba(245,158,11,0.5)":bc,cursor:"pointer"}} onClick={()=>{onSelectEvent(ev.id);onNav("event")}}>
+        {ev.changeReason&&<div style={{background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:10,padding:"6px 10px",marginBottom:10,fontSize:11,color:"#fbbf24",fontWeight:700,display:"flex",gap:6,alignItems:"flex-start"}}>
+          <span>☔</span>
+          <span style={{whiteSpace:"pre-wrap",lineHeight:1.4}}>変更：{ev.changeReason}</span>
+        </div>}
         <div style={{...S.row,marginBottom:10}}>
           <div><div style={{fontWeight:900,fontSize:16}}>{ev.title}</div>
             {ev.matchDate&&<div style={{color:C.limeLight,fontSize:12,fontWeight:700,marginTop:2}}>🗓 {fmtDate(ev.matchDate)}</div>}
           </div>{badge}
         </div>
-        {(ev.opponent||ev.location||ev.meetTime||ev.kickoffTime||ev.endTime||ev.uniformColor)&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8,fontSize:12,color:C.muted}}>
+        {(ev.opponent||ev.location||ev.meetTime||ev.kickoffTime||ev.endTime||hasUniform(ev))&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8,fontSize:12,color:C.muted}}>
           {ev.opponent&&ev.opponent!==ev.title&&<span>🆚 {ev.opponent}</span>}
           {ev.location&&<span>📍 {ev.location}</span>}
           {(ev.meetTime||ev.kickoffTime||ev.endTime)&&<span>⏰ {[ev.meetTime&&`集合${ev.meetTime}`,ev.kickoffTime&&`KO${ev.kickoffTime}`,ev.endTime&&`終了${ev.endTime}`].filter(Boolean).join(" / ")}</span>}
-          {ev.uniformColor&&<span>👕 {ev.uniformColor}</span>}
+          {hasUniform(ev)&&<span>👕 {fmtUniform(ev)}</span>}
         </div>}
         <div style={{display:"flex",gap:8,marginBottom:8}}>
           <div style={S.stat}><div style={{fontSize:18,fontWeight:900}}>{answered}<span style={{fontSize:11,color:C.dim}}>/{er.length}名</span></div><div style={{fontSize:11,color:C.muted}}>回答済み</div></div>
@@ -945,7 +986,8 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
     const names=unanswered.map(r=>`#${r.num} ${r.name}`).join(", ");
     const url=window.location.href.split('#')[0];
     const details=fmtMatchDetails(event);
-    const txt=`📢 回答のお願い\n━━━━━━━━━━━━\n📌 ${event.title}\n🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}${details?"\n"+details:""}\n⏰ 締切: ${event.deadline?fmtDateTime(event.deadline):"未設定"}\n━━━━━━━━━━━━\n📭 【未回答の方】\n ${names}\n━━━━━━━━━━━━\n👇 回答はこちらから\n${url}`;
+    const banner=fmtChangeReasonBanner(event);
+    const txt=`📢 回答のお願い\n━━━━━━━━━━━━\n${banner?banner+"\n":""}📌 ${event.title}\n🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}${details?"\n"+details:""}\n⏰ 締切: ${event.deadline?fmtDateTime(event.deadline):"未設定"}\n━━━━━━━━━━━━\n📭 【未回答の方】\n ${names}\n━━━━━━━━━━━━\n👇 回答はこちらから\n${url}`;
     if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
     else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
       const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！LINEに貼り付けてください");
@@ -953,10 +995,15 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
   }
 
   const showForm=!myResp||editing;
-  const hasYokou=!!(event.opponent||event.location||event.meetTime||event.kickoffTime||event.endTime||event.uniformColor||event.notes||(event.attachments&&event.attachments.length));
+  const hasYokou=!!(event.opponent||event.location||event.meetTime||event.kickoffTime||event.endTime||hasUniform(event)||event.notes||(event.attachments&&event.attachments.length));
 
   return(<div>
     <BackBar title={event.title} onBack={onBack} label="← 一覧"/>
+
+    {event.changeReason&&<div style={{background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.45)",borderRadius:14,padding:"12px 14px",marginBottom:12}}>
+      <div style={{fontSize:12,color:C.amber,fontWeight:900,marginBottom:4}}>☔ 変更のお知らせ</div>
+      <div style={{fontSize:13,whiteSpace:"pre-wrap",lineHeight:1.5,color:"#fbbf24"}}>{event.changeReason}</div>
+    </div>}
 
     {hasYokou&&<Accordion title="📋 要項" open={sectionOpen.yokou} onToggle={()=>toggleSection("yokou")} accent="rgba(56,189,248,0.3)">
       {event.opponent&&event.opponent!==event.title&&<div style={{marginBottom:10}}>
@@ -974,9 +1021,14 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
         {event.kickoffTime&&<div><div style={{fontSize:11,color:C.dim}}>🏆 キックオフ</div><div style={{fontSize:15,fontWeight:700}}>{event.kickoffTime}</div></div>}
         {event.endTime&&<div><div style={{fontSize:11,color:C.dim}}>🏁 終了予定</div><div style={{fontSize:15,fontWeight:700}}>{event.endTime}</div></div>}
       </div>}
-      {event.uniformColor&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:C.dim,marginBottom:2}}>👕 ユニフォーム</div>
-        <div style={{fontSize:15,fontWeight:700}}>{event.uniformColor}</div>
+      {hasUniform(event)&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,color:C.dim,marginBottom:6}}>👕 ユニフォーム</div>
+        {(event.uniformTop||event.uniformBottom||event.uniformSocks)?<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {[["👕 上",event.uniformTop],["🩳 下",event.uniformBottom],["🧦 靴下",event.uniformSocks]].map(([l,v])=><div key={l} style={{background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"6px 10px",fontSize:13,fontWeight:700,minWidth:78,textAlign:"center"}}>
+            <div style={{fontSize:10,color:C.dim,marginBottom:2}}>{l}</div>
+            <div>{v||"—"}</div>
+          </div>)}
+        </div>:<div style={{fontSize:15,fontWeight:700}}>{event.uniformColor}</div>}
       </div>}
       {event.notes&&<div style={{marginBottom:10}}>
         <div style={{fontSize:11,color:C.dim,marginBottom:2}}>📝 備考</div>
@@ -1017,6 +1069,12 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
     </div>}
 
     {lottery?.conducted&&<Btn variant="yellow" onClick={()=>onNav("results")} style={{marginBottom:12}}>🎉 抽選結果を見る</Btn>}
+
+    {(()=>{const ds=getDropouts(event,responses,lottery);return ds&&ds.dropouts.length>0&&<div style={{...S.cardAmber,textAlign:"center",marginTop:8}}>
+      <p style={{color:C.amber,fontWeight:700,marginBottom:4}}>⚠️ 当選者キャンセル発生</p>
+      <p style={{color:C.muted,fontSize:12,marginBottom:8,lineHeight:1.5}}>当選者{ds.dropouts.length}名が欠席／駐車場不要に変更しました。<br/>空き枠{ds.openSlots}台分を落選者{ds.eligibleLosers.length}名から再抽選できます。</p>
+      <Btn variant="yellow" onClick={()=>onNav("admin")}>🔄 管理者画面で再抽選</Btn>
+    </div>})()}
 
     {!lottery?.conducted&&hopefuls.length>lottSlots&&lottSlots>0&&<div style={{...S.cardAmber,textAlign:"center",marginTop:8}}>
       <p style={{color:C.amber,fontWeight:700,marginBottom:4}}>⚠️ 抽選が必要です</p>
@@ -1119,7 +1177,10 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
             <div style={{display:"flex",gap:6}}>
               <button onClick={()=>onOptimizeCarpool(event.id)} style={S.btnSm}>🔄 再計算</button>
               <button onClick={()=>{
-                const L=[`🚙 配車プラン`,`📌 ${event.title}`,`🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}`];
+                const L=[`🚙 配車プラン`];
+                const banner=fmtChangeReasonBanner(event);
+                if(banner)L.push(banner);
+                L.push(`📌 ${event.title}`,`🗓 ${event.matchDate?fmtDate(event.matchDate):"未定"}`);
                 if(event.location){L.push(`📍 ${event.location}`);L.push(`🗺 ${mapUrl(event.location)}`)}
                 L.push("━━━━━━━━━━━━");
                 L.push(`✅ 参加可能: ${plan.coveredCount}/${plan.attendeeCount}名（${driverIds.length}台使用）`);
@@ -1243,7 +1304,33 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
 
   function startEdit(ev){setEditEv({...ev});setEvLimit(ev.parkingLimit||5);setEvConfirmed(ev.confirmedParking||[]);setEvGrades(ev.inviteGrades||[...allGrades]);setEvErr("");setEvDirty(false)}
   function startNew(){const id=uid();setEditEv({_new:true,id,title:"",matchDate:"",deadline:"",parkingLimit:5});setEvLimit(5);setEvConfirmed([]);setEvGrades([...allGrades]);setEvErr("");setEvDirty(false)}
-  function updateEv(f,v){setEditEv(p=>({...p,[f]:v}));setEvDirty(true)}
+  function autoDeadlineFromMatch(matchDate){
+    if(!matchDate)return"";
+    const d=new Date(matchDate);
+    if(isNaN(d.getTime()))return"";
+    d.setDate(d.getDate()-2);
+    d.setHours(17,0,0,0);
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T17:00`;
+  }
+  function updateEv(f,v){
+    setEditEv(p=>{
+      const next={...p,[f]:v};
+      if(f==="matchDate"&&v){
+        const auto=autoDeadlineFromMatch(v);
+        const prevAuto=autoDeadlineFromMatch(p.matchDate);
+        if(!p.deadline||p.deadline===prevAuto){
+          if(auto)next.deadline=auto;
+        }
+      }
+      return next;
+    });
+    setEvDirty(true);
+  }
+  function applyAutoDeadline(){
+    const auto=autoDeadlineFromMatch(editEv?.matchDate);
+    if(!auto){setEvErr("⚠️ 先に試合日時を入力してください");return}
+    setEditEv(p=>({...p,deadline:auto}));setEvDirty(true);setEvErr("");
+  }
   function toggleGrade(g){setEvGrades(p=>p.includes(g)?p.filter(x=>x!==g):[...p,g]);setEvDirty(true)}
   function toggleConfirmed(id){setEvConfirmed(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);setEvDirty(true)}
 
@@ -1289,14 +1376,19 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
     setTeamFlash("✅ チーム名を更新しました");setTimeout(()=>setTeamFlash(""),3000);
   }
   async function saveSettings(){
+    const uo=Array.isArray(settingsDraft.uniformOptions)?settingsDraft.uniformOptions.map(x=>String(x).trim()).filter(Boolean):[];
     const cleaned={
       gasPrice:parseFloat(settingsDraft.gasPrice)||170,
       fuelEconomy:parseFloat(settingsDraft.fuelEconomy)||10,
-      handlingFee:parseInt(settingsDraft.handlingFee)||0
+      handlingFee:parseInt(settingsDraft.handlingFee)||0,
+      uniformOptions:uo.length>0?uo:DEFAULT_UNIFORM_OPTIONS
     };
     await onUpdateTeamSettings(cleaned);
     setSettingsFlash("✅ 設定を保存しました");setTimeout(()=>setSettingsFlash(""),3000);
   }
+  function addUniformOption(){setSettingsDraft(s=>({...s,uniformOptions:[...(s.uniformOptions||[]),""]}))}
+  function updateUniformOption(i,v){setSettingsDraft(s=>{const u=[...(s.uniformOptions||[])];u[i]=v;return{...s,uniformOptions:u}})}
+  function removeUniformOption(i){setSettingsDraft(s=>{const u=[...(s.uniformOptions||[])];u.splice(i,1);return{...s,uniformOptions:u}})}
   async function leaveTeam(){
     if(!await confirm("このチームから抜けますか？\n（データは削除されません。再度コードで参加可能）"))return;
     onLeaveTeam();
@@ -1323,7 +1415,7 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
           keys.forEach(k=>updateEv(k,parsed[k]));
           // 試合要項アコーディオンを開いてユーザーが確認できるようにする
           setDetailsOpen(true);
-          const labelMap={title:"📌 タイトル",matchDate:"📅 試合日時",opponent:"🆚 対戦相手",location:"📍 会場",meetTime:"⏰ 集合",kickoffTime:"🏆 KO",endTime:"🏁 終了",uniformColor:"👕 ユニ",notes:"📝 備考"};
+          const labelMap={title:"📌 タイトル",matchDate:"📅 試合日時",opponent:"🆚 対戦相手",location:"📍 会場",meetTime:"⏰ 集合",kickoffTime:"🏆 KO",endTime:"🏁 終了",uniformTop:"👕 上",uniformBottom:"🩳 下",uniformSocks:"🧦 靴下",uniformColor:"👕 ユニ",notes:"📝 備考"};
           const labels=keys.map(k=>labelMap[k]||k).join(" / ");
           setParseFlash(`✅ ${keys.length}項目を自動入力しました\n${labels}\n下の「試合要項」をご確認のうえ、足りない項目があれば手動で入力してください。`);
         }}>✨ 解析して入力</Btn>
@@ -1336,36 +1428,6 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
       <input value={editEv.title} onChange={e=>updateEv("title",e.target.value)} placeholder="例：鶴ヶ岡FC / ブロックリーグ" style={S.input} autoComplete="off"/>
       <p style={{fontSize:10,color:C.dim,marginTop:6,lineHeight:1.5}}>※ 単発試合は「相手チーム名」、リーグ戦・大会は「○○リーグ」を入力（複数試合の組み合わせは「備考」へ）</p>
     </div>
-    {[["試合日時","matchDate"],["回答締切","deadline"]].map(([l,k])=><div key={k} style={S.card}>
-      <div style={{fontSize:12,color:C.dim,marginBottom:6}}>{l} <span style={{color:"#f87171",fontWeight:700}}>※必須</span></div>
-      <input type="datetime-local" value={editEv[k]||""} onChange={e=>updateEv(k,e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
-      {editEv[k]&&<button onClick={()=>updateEv(k,"")} style={{background:"none",border:"none",color:C.dim,fontSize:12,cursor:"pointer",marginTop:4}}>× クリア</button>}
-    </div>)}
-    <div style={S.card}>
-      <div style={{fontSize:12,color:C.dim,marginBottom:12}}>🚗 駐車場の台数上限</div>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:24}}>
-        <button onClick={()=>{setEvLimit(l=>Math.max(1,l-1));setEvDirty(true)}} style={{width:52,height:52,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:28,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
-        <span style={{fontSize:52,fontWeight:900,color:C.limeLight,width:64,textAlign:"center"}}>{evLimit}</span>
-        <button onClick={()=>{setEvLimit(l=>l+1);setEvDirty(true)}} style={{width:52,height:52,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:28,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>＋</button>
-      </div>
-    </div>
-
-    {allGrades.length>1&&<div style={S.card}>
-      <div style={{fontSize:12,color:C.dim,marginBottom:10}}>📋 参加対象</div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        {allGrades.map(g=><button key={g} onClick={()=>toggleGrade(g)} style={{padding:"8px 16px",borderRadius:12,border:"none",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:evGrades.includes(g)?C.lime:"rgba(255,255,255,0.08)",color:evGrades.includes(g)?"#052e16":"rgba(255,255,255,0.5)",transition:"all .2s"}}>{g} {evGrades.includes(g)?"✓":""}</button>)}
-      </div>
-    </div>}
-
-    <div style={S.card}>
-      <div style={{fontSize:12,color:C.dim,marginBottom:10}}>🔒 確定枠（抽選なしで駐車場確定）</div>
-      {evRoster.length===0?<p style={{color:C.dim,fontSize:13}}>対象メンバーがいません</p>
-      :<div style={{maxHeight:200,overflowY:"auto"}}>{evRoster.map(r=><div key={r.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",marginBottom:4,background:evConfirmed.includes(r.id)?"rgba(56,189,248,0.1)":"rgba(255,255,255,0.04)",borderRadius:10,cursor:"pointer",transition:"all .2s"}} onClick={()=>toggleConfirmed(r.id)}>
-        <span style={{fontSize:13}}><span style={{color:C.dim,fontSize:11}}>#{r.num} </span>{r.name}<span style={{color:C.dim,fontSize:11}}> ({r.grade||"4年"})</span></span>
-        {evConfirmed.includes(r.id)?<Tag label="🔒 確定" color="sky"/>:<span style={{color:C.faint,fontSize:12}}>タップで確定</span>}
-      </div>)}</div>}
-      <div style={{fontSize:12,color:C.sky,marginTop:8,fontWeight:700}}>確定: {evConfirmed.length}台 ／ 抽選枠: {Math.max(0,evLimit-evConfirmed.length)}台</div>
-    </div>
 
     <div style={S.card}>
       <button onClick={()=>setDetailsOpen(o=>!o)} style={{background:"none",border:"none",color:"#fff",fontFamily:"inherit",width:"100%",textAlign:"left",cursor:"pointer",padding:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1373,6 +1435,20 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
         <div style={{fontSize:14,color:C.dim}}>{detailsOpen?"▲":"▼"}</div>
       </button>
       {detailsOpen&&<div style={{marginTop:12}} className="fade-in">
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📅 試合日時 <span style={{color:"#f87171",fontWeight:700}}>※必須</span></div>
+          <input type="datetime-local" value={editEv.matchDate||""} onChange={e=>updateEv("matchDate",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
+          {editEv.matchDate&&<button onClick={()=>updateEv("matchDate","")} style={{background:"none",border:"none",color:C.dim,fontSize:12,cursor:"pointer",marginTop:4}}>× クリア</button>}
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:C.dim,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span>⏰ 回答締切 <span style={{color:"#f87171",fontWeight:700}}>※必須</span></span>
+            <button onClick={applyAutoDeadline} style={{background:"rgba(147,197,253,0.12)",border:"1px solid rgba(147,197,253,0.3)",color:C.limeLight,fontSize:10,cursor:"pointer",borderRadius:8,padding:"3px 8px",fontFamily:"inherit",fontWeight:700}}>📅 試合2日前17時に自動設定</button>
+          </div>
+          <input type="datetime-local" value={editEv.deadline||""} onChange={e=>updateEv("deadline",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
+          {editEv.deadline&&<button onClick={()=>updateEv("deadline","")} style={{background:"none",border:"none",color:C.dim,fontSize:12,cursor:"pointer",marginTop:4}}>× クリア</button>}
+          <p style={{fontSize:10,color:C.dim,marginTop:4,lineHeight:1.5}}>※ 試合日時を入力すると、自動で「試合日の2日前 17:00」に設定されます（後から手動変更可）</p>
+        </div>
         <div style={{marginBottom:10}}>
           <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📍 会場 <span style={{color:"#f87171",fontWeight:700}}>※必須</span></div>
           <input value={editEv.location||""} onChange={e=>updateEv("location",e.target.value)} placeholder="例：中央公園グラウンド" style={S.input} autoComplete="off"/>
@@ -1390,13 +1466,33 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
           <input type="time" value={editEv.endTime||""} onChange={e=>updateEv("endTime",e.target.value)} style={{...S.input,colorScheme:"dark"}}/>
         </div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.dim,marginBottom:4}}>👕 ユニフォーム色（任意）</div>
-          <input value={editEv.uniformColor||""} onChange={e=>updateEv("uniformColor",e.target.value)} placeholder="例：白 / 紺" style={S.input} autoComplete="off"/>
+          <div style={{fontSize:11,color:C.dim,marginBottom:6}}>👕 ユニフォーム色（任意）</div>
+          {(()=>{const opts=getTeamSettings(teamMeta).uniformOptions;
+            const parts=[["uniformTop","👕 上"],["uniformBottom","🩳 下"],["uniformSocks","🧦 靴下"]];
+            return <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {parts.map(([k,l])=><div key={k} style={{flex:"1 1 90px",minWidth:90}}>
+                <div style={{fontSize:10,color:C.dim,marginBottom:3}}>{l}</div>
+                <select value={editEv[k]||""} onChange={e=>updateEv(k,e.target.value)} style={{...S.select,fontSize:14,padding:"10px 8px"}}>
+                  <option value="">─</option>
+                  {opts.map(c=><option key={c} value={c}>{c}</option>)}
+                  {editEv[k]&&!opts.includes(editEv[k])&&<option value={editEv[k]}>{editEv[k]}（カスタム）</option>}
+                </select>
+              </div>)}
+            </div>;
+          })()}
+          {editEv.uniformColor&&!editEv.uniformTop&&!editEv.uniformBottom&&!editEv.uniformSocks&&<p style={{fontSize:10,color:C.amber,marginTop:6,lineHeight:1.5}}>※ 旧形式: {editEv.uniformColor}（上下靴下に分けて再設定すると新形式に切替わります）</p>}
+          <p style={{fontSize:10,color:C.dim,marginTop:6,lineHeight:1.5}}>※ 選択肢はチーム設定「⚙️ 設定」→「👕 ユニフォーム色の選択肢」で変更できます</p>
         </div>
         <div style={{marginBottom:10}}>
           <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📝 備考</div>
           <textarea value={editEv.notes||""} onChange={e=>updateEv("notes",e.target.value)} placeholder="その他連絡事項" rows={3} style={{...S.input,resize:"vertical",minHeight:60,fontFamily:"inherit"}}/>
         </div>
+        {!editEv._new&&<div style={{marginBottom:10,background:"rgba(245,158,11,0.06)",border:"1px solid rgba(245,158,11,0.3)",borderRadius:12,padding:10}}>
+          <div style={{fontSize:11,color:C.amber,marginBottom:4,fontWeight:700}}>☔ 変更理由（雨天・日時会場変更等）</div>
+          <textarea value={editEv.changeReason||""} onChange={e=>updateEv("changeReason",e.target.value)} placeholder="例：雨天のため会場変更／キックオフ時刻変更／中止" rows={2} style={{...S.input,resize:"vertical",minHeight:50,fontFamily:"inherit"}}/>
+          <p style={{fontSize:10,color:C.dim,marginTop:4,lineHeight:1.5}}>※ 入力するとLINE共有時に変更理由が冒頭に表示されます。駐車場台数を変更すると保存時に自動で再抽選フローが起動します。</p>
+          {editEv.changeReason&&<button onClick={()=>updateEv("changeReason","")} style={{background:"none",border:"none",color:C.dim,fontSize:11,cursor:"pointer",marginTop:4}}>× 変更理由をクリア</button>}
+        </div>}
         <div>
           <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📎 資料リンク（Google ドライブ等の共有URL）</div>
           {(editEv.attachments||[]).map(a=><div key={a.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"8px 12px",marginBottom:6}}>
@@ -1416,6 +1512,32 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
         </div>
       </div>}
     </div>
+
+    <div style={S.card}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:12}}>🚗 駐車場の台数上限</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:24}}>
+        <button onClick={()=>{setEvLimit(l=>Math.max(1,l-1));setEvDirty(true)}} style={{width:52,height:52,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:28,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+        <span style={{fontSize:52,fontWeight:900,color:C.limeLight,width:64,textAlign:"center"}}>{evLimit}</span>
+        <button onClick={()=>{setEvLimit(l=>l+1);setEvDirty(true)}} style={{width:52,height:52,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:28,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>＋</button>
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:10}}>🔒 確定枠（抽選なしで駐車場確定）</div>
+      {evRoster.length===0?<p style={{color:C.dim,fontSize:13}}>対象メンバーがいません</p>
+      :<div style={{maxHeight:200,overflowY:"auto"}}>{evRoster.map(r=><div key={r.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",marginBottom:4,background:evConfirmed.includes(r.id)?"rgba(56,189,248,0.1)":"rgba(255,255,255,0.04)",borderRadius:10,cursor:"pointer",transition:"all .2s"}} onClick={()=>toggleConfirmed(r.id)}>
+        <span style={{fontSize:13}}><span style={{color:C.dim,fontSize:11}}>#{r.num} </span>{r.name}<span style={{color:C.dim,fontSize:11}}> ({r.grade||"4年"})</span></span>
+        {evConfirmed.includes(r.id)?<Tag label="🔒 確定" color="sky"/>:<span style={{color:C.faint,fontSize:12}}>タップで確定</span>}
+      </div>)}</div>}
+      <div style={{fontSize:12,color:C.sky,marginTop:8,fontWeight:700}}>確定: {evConfirmed.length}台 ／ 抽選枠: {Math.max(0,evLimit-evConfirmed.length)}台</div>
+    </div>
+
+    {allGrades.length>1&&<div style={S.card}>
+      <div style={{fontSize:12,color:C.dim,marginBottom:10}}>📋 参加対象</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {allGrades.map(g=><button key={g} onClick={()=>toggleGrade(g)} style={{padding:"8px 16px",borderRadius:12,border:"none",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:evGrades.includes(g)?C.lime:"rgba(255,255,255,0.08)",color:evGrades.includes(g)?"#052e16":"rgba(255,255,255,0.5)",transition:"all .2s"}}>{g} {evGrades.includes(g)?"✓":""}</button>)}
+      </div>
+    </div>}
 
     <div style={S.card}>
       <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>🎯 動作モード</div>
@@ -1490,7 +1612,9 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
             <button onClick={()=>{
               const url=window.location.href.split('#')[0];
               const details=fmtMatchDetails(ev);
-              const txt=`🏆 新しい試合のお知らせ\n━━━━━━━━━━━━\n📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}${details?"\n"+details:""}\n⏰ 締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n━━━━━━━━━━━━\n👇 参加・駐車場の回答はこちら\n${url}`;
+              const banner=fmtChangeReasonBanner(ev);
+              const header=banner?"🏆 試合内容変更のお知らせ":"🏆 新しい試合のお知らせ";
+              const txt=`${header}\n━━━━━━━━━━━━\n${banner?banner+"\n":""}📌 ${ev.title}\n🗓 ${ev.matchDate?fmtDateTime(ev.matchDate):"未定"}${details?"\n"+details:""}\n⏰ 締切: ${ev.deadline?fmtDateTime(ev.deadline):"なし"}\n━━━━━━━━━━━━\n👇 参加・駐車場の回答はこちら\n${url}`;
               if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
               else{navigator.clipboard.writeText(txt).then(()=>alert("コピーしました！LINEに貼り付けてください")).catch(()=>{
                 const el=document.createElement("textarea");el.value=txt;el.style.position="absolute";el.style.left="-9999px";document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました！LINEに貼り付けてください");
@@ -1573,6 +1697,17 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
             const el=document.createElement("textarea");el.value=txt;document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);alert("コピーしました");
           })}
         }} style={{...S.btnSm,width:"100%",marginTop:8}}>📢 LINE用招待文を生成</button>
+      </div>}
+      {teamId&&<div style={S.card}>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>👕 ユニフォーム色の選択肢</div>
+        <p style={{fontSize:11,color:C.dim,marginBottom:10,lineHeight:1.5}}>試合作成時にプルダウンで選択できるユニフォーム色を管理できます</p>
+        {(settingsDraft.uniformOptions||[]).map((u,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,background:"rgba(255,255,255,0.04)",borderRadius:10,padding:"6px 8px"}}>
+          <input value={u} onChange={e=>updateUniformOption(i,e.target.value)} placeholder="例：白 / 紺" style={{...S.input,flex:1,padding:"8px 10px",fontSize:13}}/>
+          <button onClick={()=>removeUniformOption(i)} style={{background:"rgba(239,68,68,0.15)",border:"none",color:"rgba(248,113,113,0.7)",fontSize:16,cursor:"pointer",padding:"6px 10px",borderRadius:8}}>×</button>
+        </div>)}
+        <button onClick={addUniformOption} style={{background:"rgba(147,197,253,0.1)",border:"1px dashed rgba(147,197,253,0.3)",borderRadius:12,color:C.limeLight,fontSize:13,cursor:"pointer",width:"100%",padding:"10px",marginBottom:10,fontFamily:"inherit"}}>＋ 色を追加</button>
+        <FlashMsg msg={settingsFlash}/>
+        <Btn onClick={saveSettings}>💾 設定を保存</Btn>
       </div>}
       {teamId&&<div style={S.card}>
         <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>💰 費用算定設定（機能2用）</div>
@@ -1670,11 +1805,12 @@ function LotteryScreen({event,participants,limit,isRerun,mode,carpoolPoint,onCom
   },[curIdx,phase]);
 
   return(<div>
-    <BackBar title={mode==="carpool"?"🚙 配車あみだくじ":isRerun?"🔄 再抽選":"🎰 あみだくじ抽選"} onBack={onBack} label="← 戻る"/>
+    <BackBar title={mode==="carpool"?"🚙 配車あみだくじ":mode==="limit_decrease"?"☔ 台数減 再抽選":isRerun?"🔄 再抽選":"🎰 あみだくじ抽選"} onBack={onBack} label="← 戻る"/>
     <div style={{...S.card,textAlign:"center"}}>
       {mode==="carpool"&&<div style={{color:C.limeLight,fontSize:12,fontWeight:700,marginBottom:6}}>📍 {carpoolPoint}（定員オーバーのため乗車者を決定）</div>}
-      {isRerun&&mode!=="carpool"&&<div style={{color:C.amber,fontSize:12,fontWeight:700,marginBottom:6}}>⚠️ 当選者キャンセルによる再抽選</div>}
-      <span style={{color:C.muted,fontSize:14}}><span style={{color:C.amber,fontWeight:700}}>{n}名</span> の希望者 → <span style={{color:C.limeLight,fontWeight:700}}>{limit}{mode==="carpool"?"席":isRerun?"枠":"台"}</span> 当選</span>
+      {mode==="limit_decrease"&&<div style={{color:C.amber,fontSize:12,fontWeight:700,marginBottom:6}}>☔ 駐車場台数減少による再抽選（現当選者から絞り込み）</div>}
+      {isRerun&&mode==="parking"&&<div style={{color:C.amber,fontSize:12,fontWeight:700,marginBottom:6}}>⚠️ 当選者キャンセル／枠追加による再抽選</div>}
+      <span style={{color:C.muted,fontSize:14}}><span style={{color:C.amber,fontWeight:700}}>{n}名</span> の希望者 → <span style={{color:C.limeLight,fontWeight:700}}>{limit}{mode==="carpool"?"席":(isRerun||mode==="limit_decrease")?"枠":"台"}</span> 当選</span>
     </div>
     <div ref={ref} style={{width:"100%",overflowX:"auto",background:"rgba(0,0,0,0.25)",borderRadius:16,padding:8,marginBottom:12}}>
       <svg width={SVG_W} height={SVG_H} style={{minWidth:SVG_W,display:"block",margin:"0 auto"}}>
@@ -1710,7 +1846,10 @@ function ResultsScreen({event,roster,responses,lottery,onReLottery,onBack}){
   const noReply=er.filter(r=>!responses[r.id]);
 
   function genText(){
-    const L=[`🏆 駐車場抽選結果`,`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`];
+    const L=[`🏆 駐車場抽選結果`];
+    const banner=fmtChangeReasonBanner(event);
+    if(banner)L.push(banner);
+    L.push(`📌 ${event?.title||"未定"}`,`🗓 ${event?.matchDate?fmtDate(event.matchDate):"未定"}`);
     if(event?.location){L.push(`📍 ${event.location}`);L.push(`🗺 ${mapUrl(event.location)}`)}
     L.push("━━━━━━━━━━━━");
     const formatName = (user) => {
@@ -1898,9 +2037,63 @@ function App(){
   async function handleSaveRoster(ro){editingRef.current=false;setRoster(ro);await fbSet("roster",ro)}
   async function handleSaveEvent(ev){
     editingRef.current=false;
-    const next=events.find(e=>e.id===ev.id)?events.map(e=>e.id===ev.id?ev:e):[...events,ev];
+    const prevEv=events.find(e=>e.id===ev.id);
+    const next=prevEv?events.map(e=>e.id===ev.id?ev:e):[...events,ev];
     setEvents(next);await fbSet("events",next);
     if(!allResponses[ev.id])setAllResponses(p=>({...p,[ev.id]:{}}));
+    // 駐車場台数の増減があり、すでに抽選済みなら自動で再抽選フローを起動
+    const lott=allLotteries[ev.id];
+    if(prevEv&&lott?.conducted){
+      const oldLimit=prevEv.parkingLimit||0;
+      const newLimit=ev.parkingLimit||0;
+      if(oldLimit!==newLimit){
+        triggerParkingLimitRerun(ev,lott,oldLimit,newLimit);
+      }
+    }
+  }
+  function triggerParkingLimitRerun(ev,lott,oldLimit,newLimit){
+    const resp=allResponses[ev.id]||{};
+    const confirmed=getConfirmed(ev);
+    const currentWinners=(lott.winners||[]).filter(id=>!confirmed.includes(id)).filter(id=>{const r=resp[id];return r&&r.attending&&r.parkingNeeded});
+    const newLottSlots=Math.max(0,newLimit-confirmed.length);
+    if(newLimit<oldLimit){
+      // 減少: 当選者から枠数に絞り込む抽選
+      if(currentWinners.length<=newLottSlots){
+        alert(`✅ 駐車場台数を ${oldLimit}→${newLimit}台 に変更しました。\n現在の当選者(${currentWinners.length}名)が新枠(${newLottSlots}台)に収まるため、再抽選は不要です。`);
+        return;
+      }
+      if(!window.confirm(`☔ 駐車場台数を ${oldLimit}→${newLimit}台 に減らしました。\n現当選者 ${currentWinners.length}名 から ${newLottSlots}名 を再抽選します。よろしいですか？`))return;
+      const participants=currentWinners.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
+      setSelectedEventId(ev.id);
+      setLottParticipants(participants);
+      setLottLimit(newLottSlots);
+      setLottIsRerun(false);
+      setLottMode("limit_decrease");
+      navigate("lottery");
+    }else if(newLimit>oldLimit){
+      // 増加: 増加分だけ落選者から追加抽選
+      const allParts=lott.allParticipants||[];
+      const winnerIds=new Set(lott.winners||[]);
+      const eligibleLosers=allParts.filter(id=>{
+        if(winnerIds.has(id))return false;
+        if(confirmed.includes(id))return false;
+        const r=resp[id];
+        return r&&r.attending&&r.parkingNeeded;
+      });
+      const additionalSlots=Math.min(newLimit-oldLimit,eligibleLosers.length);
+      if(eligibleLosers.length===0||additionalSlots===0){
+        alert(`☔ 駐車場台数を ${oldLimit}→${newLimit}台 に増やしました。\n追加枠 ${newLimit-oldLimit}台 ですが、再抽選対象の落選者がいません。`);
+        return;
+      }
+      if(!window.confirm(`☔ 駐車場台数を ${oldLimit}→${newLimit}台 に増やしました。\n増加分 ${additionalSlots}台 を落選者 ${eligibleLosers.length}名 から追加抽選します。よろしいですか？`))return;
+      const participants=eligibleLosers.map(id=>roster.find(r=>r.id===id)).filter(Boolean);
+      setSelectedEventId(ev.id);
+      setLottParticipants(participants);
+      setLottLimit(additionalSlots);
+      setLottIsRerun(true);
+      setLottMode("parking");
+      navigate("lottery");
+    }
   }
   async function handleDeleteEvent(id){
     const next=events.filter(e=>e.id!==id);setEvents(next);await fbSet("events",next);
@@ -1972,11 +2165,27 @@ function App(){
       navigate("event");
       return;
     }
+    if(lottMode==="limit_decrease"){
+      // 台数減少による再抽選：当選者を新規抽選結果で完全に置き換える
+      result={
+        ...(prev||{}),
+        conducted:true,
+        winners:newWinners,
+        allParticipants:lottParticipants.map(p=>p.id),
+        lastLimitChangeAt:Date.now(),
+        history:[...(prev?.history||[{round:1,winners:prev?.winners||[],at:prev?.conductedAt}]),{round:(prev?.history?.length||1)+1,winners:newWinners,at:Date.now(),reason:"limit_decrease"}]
+      };
+      await fbSet(`lotteries/${selectedEventId}`,result);
+      setAllLotteries(p=>({...p,[selectedEventId]:result}));
+      navigate("results");
+      return;
+    }
     if(prev?.conducted&&lottIsRerun){
       const prevWinners=prev.winners||[];
       const resp=allResponses[selectedEventId]||{};
       const stillIn=prevWinners.filter(id=>{const r=resp[id];return r&&r.attending&&r.parkingNeeded});
-      result={...prev,winners:[...stillIn,...newWinners],lastReLotteryAt:Date.now(),history:[...(prev.history||[{round:1,winners:prev.winners,at:prev.conductedAt}]),{round:(prev.history?.length||1)+1,winners:newWinners,at:Date.now()}]};
+      const mergedParts=Array.from(new Set([...(prev.allParticipants||[]),...lottParticipants.map(p=>p.id)]));
+      result={...prev,winners:[...stillIn,...newWinners],allParticipants:mergedParts,lastReLotteryAt:Date.now(),history:[...(prev.history||[{round:1,winners:prev.winners,at:prev.conductedAt}]),{round:(prev.history?.length||1)+1,winners:newWinners,at:Date.now()}]};
     }else{
       result={conducted:true,conductedAt:Date.now(),winners:newWinners,allParticipants:lottParticipants.map(p=>p.id)};
     }
