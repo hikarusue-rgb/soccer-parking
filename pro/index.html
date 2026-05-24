@@ -811,27 +811,27 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
   const now=new Date();
   const sortedAsc=[...events].sort((a,b)=>new Date(a.matchDate||"2099-12-31")-new Date(b.matchDate||"2099-12-31"));
   const future=sortedAsc.filter(e=>!e.matchDate||new Date(e.matchDate)>=new Date(now-86400000));
-  // 今週末（土・日）と翌週末を計算（月-日週として、Sat=5,Sun=6）
+  // 今週（月～日）と翌週（月～日）を計算 — 祝日の平日試合も拾えるよう週単位で集計
   const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   const dow=today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
   const dowMon=(dow+6)%7; // 0=Mon, ..., 5=Sat, 6=Sun
-  const thisSat=new Date(today);
-  thisSat.setDate(today.getDate()+(5-dowMon)); // 今週の土曜日（過去なら-1）
-  thisSat.setHours(0,0,0,0);
-  const thisSunEnd=new Date(thisSat);
-  thisSunEnd.setDate(thisSat.getDate()+1);
+  const thisMon=new Date(today);
+  thisMon.setDate(today.getDate()-dowMon); // 今週の月曜日 0:00
+  thisMon.setHours(0,0,0,0);
+  const thisSunEnd=new Date(thisMon);
+  thisSunEnd.setDate(thisMon.getDate()+6); // 今週の日曜日 23:59:59
   thisSunEnd.setHours(23,59,59,999);
-  const nextSat=new Date(thisSat);
-  nextSat.setDate(thisSat.getDate()+7);
+  const nextMon=new Date(thisMon);
+  nextMon.setDate(thisMon.getDate()+7);
   const nextSunEnd=new Date(thisSunEnd);
   nextSunEnd.setDate(thisSunEnd.getDate()+7);
   const inRange=(d,a,b)=>d>=a&&d<=b;
-  const thisWeekend=future.filter(e=>e.matchDate&&inRange(new Date(e.matchDate),thisSat,thisSunEnd));
-  const nextWeekend=future.filter(e=>e.matchDate&&inRange(new Date(e.matchDate),nextSat,nextSunEnd));
+  const thisWeek=future.filter(e=>e.matchDate&&inRange(new Date(e.matchDate),thisMon,thisSunEnd));
+  const nextWeek=future.filter(e=>e.matchDate&&inRange(new Date(e.matchDate),nextMon,nextSunEnd));
   const others=future.filter(e=>{
     if(!e.matchDate)return true;
     const d=new Date(e.matchDate);
-    return !inRange(d,thisSat,thisSunEnd)&&!inRange(d,nextSat,nextSunEnd);
+    return !inRange(d,thisMon,thisSunEnd)&&!inRange(d,nextMon,nextSunEnd);
   });
   const archive=[...events].filter(e=>e.matchDate&&new Date(e.matchDate)<new Date(now-86400000)).sort((a,b)=>new Date(b.matchDate)-new Date(a.matchDate));
   const[showArchive,setShowArchive]=useState(false);
@@ -890,7 +890,7 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
     </div>
     {maintenanceNotice&&<MaintenanceBanner notice={maintenanceNotice} style={{marginBottom:16}}/>}
     {loading?<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>読み込み中...</div>
-    :thisWeekend.length===0&&nextWeekend.length===0&&others.length===0&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
+    :thisWeek.length===0&&nextWeek.length===0&&others.length===0&&archive.length===0?<div style={{...S.card,textAlign:"center",padding:"32px 16px"}}>
       <div style={{fontSize:40,marginBottom:12}}>📅</div>
       <p style={{color:C.muted,marginBottom:6}}>試合がまだ登録されていません</p>
       <p style={{color:C.dim,fontSize:12}}>管理者が試合を追加するまでお待ちください</p>
@@ -899,16 +899,16 @@ function HomeScreen({roster,events,allResponses,allLotteries,onNav,onSelectEvent
       <div style={{marginBottom:8}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:4}}>
           <span style={{fontSize:18}}>🌟</span>
-          <span style={{fontSize:13,fontWeight:900,color:C.limeLight}}>今週の試合（土日：{fmtMD(thisSat)}・{fmtMD(thisSunEnd)}）</span>
+          <span style={{fontSize:13,fontWeight:900,color:C.limeLight}}>今週の試合（{fmtMD(thisMon)}・{fmtMD(thisSunEnd)}）</span>
         </div>
-        {thisWeekend.length>0?thisWeekend.map(renderEvent):<div style={{...S.card,textAlign:"center",padding:"16px",color:C.dim,fontSize:12}}>今週の試合はありません</div>}
+        {thisWeek.length>0?thisWeek.map(renderEvent):<div style={{...S.card,textAlign:"center",padding:"16px",color:C.dim,fontSize:12}}>今週の試合はありません</div>}
       </div>
       <div style={{marginTop:16,marginBottom:8}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:4}}>
           <span style={{fontSize:18}}>📅</span>
-          <span style={{fontSize:13,fontWeight:900,color:C.sky}}>翌週の試合（土日：{fmtMD(nextSat)}・{fmtMD(nextSunEnd)}）</span>
+          <span style={{fontSize:13,fontWeight:900,color:C.sky}}>翌週の試合（{fmtMD(nextMon)}・{fmtMD(nextSunEnd)}）</span>
         </div>
-        {nextWeekend.length>0?nextWeekend.map(renderEvent):<div style={{...S.card,textAlign:"center",padding:"16px",color:C.dim,fontSize:12}}>翌週の試合はありません</div>}
+        {nextWeek.length>0?nextWeek.map(renderEvent):<div style={{...S.card,textAlign:"center",padding:"16px",color:C.dim,fontSize:12}}>翌週の試合はありません</div>}
       </div>
       {others.length>0&&<div style={{marginTop:16}}>
         <button onClick={()=>setShowOthers(!showOthers)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"10px 24px",color:"rgba(255,255,255,0.55)",fontSize:13,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
