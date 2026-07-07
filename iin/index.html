@@ -136,7 +136,7 @@ function scored(){
   if(!$('incNC').checked) list=list.filter(p=>!p.non_committee);
   if(cf==="verified") list=list.filter(p=>p.confidence==="verified");
   else if(cf==="nonauto") list=list.filter(p=>p.confidence==="verified"||p.confidence==="reference");
-  if(q) list=list.filter(p=>(p.name+p.affiliation+p.specialty+p.tags.join()).includes(q));
+  if(q) list=list.filter(p=>(p.name+p.affiliation+p.specialty+p.tags.join()+p.committees.map(c=>c.name).join()).includes(q));
   list.forEach(p=>p._total=Math.round((w*p.council_score+(1-w)*p.paper_score)*10)/10);
   list.sort((a,b)=>b._total-a._total||b.council_score-a.council_score);
   return list;
