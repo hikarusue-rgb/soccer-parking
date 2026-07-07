@@ -49,9 +49,10 @@ tbody tr{cursor:pointer}tbody tr:hover{background:#f3f8ff}
 .sec h3{font-size:12px;color:var(--sub);letter-spacing:.5px;margin:0 0 8px;border-bottom:1px solid var(--line);padding-bottom:5px}
 .kv{display:flex;justify-content:space-between;padding:3px 0;font-size:13px}.kv b{color:var(--sub);font-weight:600}
 .comm{padding:7px 10px;background:#f6f9fd;border-radius:8px;margin-bottom:6px;font-size:13px;border-left:3px solid var(--accent)}
-.paper{padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:12.5px}
+.paper{display:block;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:12.5px;text-decoration:none;color:var(--ink);cursor:pointer;transition:.12s}
+a.paper:hover{background:#f0f6fe;border-color:var(--accent2)}
 .paper .y{display:inline-block;font-weight:700;color:var(--accent);margin-right:6px}
-.paper .j{color:var(--sub);font-size:11.5px}
+.paper .j{color:var(--sub);font-size:11.5px;margin-top:2px}
 .lk{display:inline-flex;gap:5px;padding:8px 12px;background:#f0f6fe;border:1px solid #cfe0f3;border-radius:8px;color:var(--accent);text-decoration:none;font-size:13px;margin:0 6px 6px 0;font-weight:600}
 .lk:hover{background:#e2eefb}
 .close{position:absolute;top:14px;right:16px;color:#fff;font-size:26px;cursor:pointer;line-height:1;opacity:.85}.close:hover{opacity:1}
@@ -167,7 +168,7 @@ function openDrawer(p,rank){
   const links=[['researchmap',p.researchmap],['Google Scholar',p.scholar],['CiNii',p.cinii],['Web検索',p.google]]
     .map(([t,u])=>`<a class="lk" href="${u}" target="_blank" rel="noopener">🔗 ${t}</a>`).join('');
   const comms=p.committees.length?p.committees.map(c=>`<div class="comm"><b>${c.name}</b> <span class="rolechip${['主査','会長','分科会長','部会長'].includes(c.role)?' chair':''}">${c.role}</span></div>`).join(''):'<div class="mini">現在この審議会群での委員就任は確認されていません（学術実績で候補入り）。</div>';
-  const papers=p.papers&&p.papers.length?p.papers.map(x=>`<div class="paper"><span class="y">${x.y}</span>${x.t}<div class="j">${x.j||''}</div></div>`).join(''):`<div class="mini">researchmap未登録のためリンクから確認してください。</div>`;
+  const papers=p.papers&&p.papers.length?p.papers.map(x=>{const su='https://scholar.google.co.jp/scholar?q='+encodeURIComponent(x.t);return `<a class="paper" href="${su}" target="_blank" rel="noopener noreferrer" title="Google Scholarでこの論文を検索"><span class="y">${x.y}</span>${x.t}<div class="j">${x.j||''} ↗</div></a>`;}).join(''):`<div class="mini">この先生はresearchmapに論文が未登録です。下の「researchmap」「Google Scholar」等のリンクから論文を確認できます。</div>`;
   const est=p.paper_estimated?' <span class="est">（推定）</span>':'';
   $('drawer').innerHTML=`<div class="dhead"><span class="close" onclick="closeDrawer()">×</span>
       <div class="mini">ランキング ${rank}位 ${p.non_committee?'／非委員の第一人者':''} ／ ${p.confidence==='verified'?'精査済データ':(p.confidence==='reference'?'参考(公開情報ベース・未精査)':(p.confidence==='industry'?'企業・団体の有識者(名簿から抽出)':'自動収録(名簿から抽出・所属等要確認)'))}</div>
