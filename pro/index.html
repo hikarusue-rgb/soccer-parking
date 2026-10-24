@@ -40,19 +40,45 @@ const{useState,useEffect,useRef,useCallback}=React;
 const FB_ROOT="https://soccer-parking-default-rtdb.asia-southeast1.firebasedatabase.app/pro";
 const GLOBAL_ADMIN_PASS="spadmin2026"; // 全体管理者パスワード（コードで変更可能）
 let TEAM_ID=null;
+function validTeamId(id){return typeof id==="string"&&/^[A-Za-z0-9_-]{1,64}$/.test(id)}
 (function initTeamId(){
   const u=new URLSearchParams(window.location.search).get("team");
-  if(u){TEAM_ID=u;localStorage.setItem("parkingApp_teamId",u)}
-  else TEAM_ID=localStorage.getItem("parkingApp_teamId")||null;
+  const candidate=u||localStorage.getItem("parkingApp_teamId");
+  if(validTeamId(candidate)){TEAM_ID=candidate;localStorage.setItem("parkingApp_teamId",candidate)}
+  else localStorage.removeItem("parkingApp_teamId");
 })();
 function getFB(){return TEAM_ID?`${FB_ROOT}/teams/${TEAM_ID}`:FB_ROOT}
-function setTeamId(id){TEAM_ID=id;if(id)localStorage.setItem("parkingApp_teamId",id);else localStorage.removeItem("parkingApp_teamId")}
-async function fbGet(p){try{const r=await fetch(`${getFB()}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbGet:",e);return undefined}}
-async function fbSet(p,v){try{await fetch(`${getFB()}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbSet:",e)}}
-async function fbDel(p){try{await fetch(`${getFB()}/${p}.json`,{method:"DELETE"})}catch(e){console.error("fbDel:",e)}}
-async function fbRootGet(p){try{const r=await fetch(`${FB_ROOT}/${p}.json`);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){console.error("fbRootGet:",e);return undefined}}
-async function fbRootSet(p,v){try{await fetch(`${FB_ROOT}/${p}.json`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)})}catch(e){console.error("fbRootSet:",e)}}
-async function checkTeamExists(id){const r=await fetch(`${FB_ROOT}/teams/${id}/meta.json`);if(!r.ok)return null;const d=await r.json();return d||null}
+function setTeamId(id){if(id!==null&&!validTeamId(id))throw new Error("チームコードの形式が正しくありません");TEAM_ID=id;if(id)localStorage.setItem("parkingApp_teamId",id);else localStorage.removeItem("parkingApp_teamId")}
+function fbUrl(base,p){
+  if(typeof p!=="string"||!p.split("/").every(part=>/^[A-Za-z0-9_-]+$/.test(part)))throw new Error("データの保存先が正しくありません");
+  return `${base}/${p}.json`;
+}
+async function fbRead(base,p){const r=await fetch(fbUrl(base,p));if(!r.ok)throw new Error(`データベースへのアクセスに失敗しました（HTTP ${r.status}）`);return await r.json()}
+async function fbWrite(base,p,method,v){
+  try{
+    const options={method};
+    if(method==="PUT"){options.headers={"Content-Type":"application/json"};options.body=JSON.stringify(v)}
+    const r=await fetch(fbUrl(base,p),options);
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+  }catch(cause){
+    const error=new Error(`保存できませんでした。通信状態とアクセス権限を確認し、再度お試しください。（${cause.message}）`);
+    error.parkingWriteError=true;
+    window.dispatchEvent(new CustomEvent("parking-write-error",{detail:error.message}));
+    throw error;
+  }
+}
+async function fbGet(p){try{return await fbRead(getFB(),p)}catch(e){console.error("fbGet:",e);return undefined}}
+async function fbSet(p,v){return await fbWrite(getFB(),p,"PUT",v)}
+async function fbDel(p){return await fbWrite(getFB(),p,"DELETE")}
+async function fbRootGet(p){try{return await fbRead(FB_ROOT,p)}catch(e){console.error("fbRootGet:",e);return undefined}}
+async function fbRootSet(p,v){return await fbWrite(FB_ROOT,p,"PUT",v)}
+async function checkTeamExists(id){if(!validTeamId(id))throw new Error("チームコードの形式が正しくありません");return await fbRead(FB_ROOT,`teams/${id}/meta`)}
+function safeLinkUrl(value){
+  if(typeof value!=="string")return "";
+  const text=value.trim();
+  if(/[\u0000-\u0020\u007f]/.test(text))return "";
+  try{const url=new URL(text);return ["https:","http:"].includes(url.protocol)&&!url.username&&!url.password?url.href:""}catch(e){return ""}
+}
 async function createTeam(name){
   const id=Math.random().toString(36).slice(2,8).toUpperCase();
   await fbRootSet(`teams/${id}/meta`,{name:name.trim()||"無名チーム",createdAt:Date.now()});
@@ -998,20 +1024,20 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
     const parkingNeeded=attending?(isConfirmed?true:parking):false;
     const cap=attending&&(isConfirmed||parking)?carpool:0;
     const payload={memberId,attending,parkingNeeded,carpoolCapacity:cap};
-    await onSubmit(event.id,payload);
-    setSaving(false);setDone(true);setEditing(false);
+    try{await onSubmit(event.id,payload);setDone(true);setEditing(false)}
+    catch(e){setErr(e.message)}finally{setSaving(false)}
   }
 
   async function saveDriverMeetingPoint(){
     if(!driverMpInput.trim()){setErr("集合場所を入力してください");return}
     setErr("");setSavingCarpool(true);
-    await onSaveCarpool(event.id,memberId,{meetingPoint:driverMpInput.trim()});
-    setSavingCarpool(false);
+    try{await onSaveCarpool(event.id,memberId,{meetingPoint:driverMpInput.trim()})}
+    catch(e){setErr(e.message)}finally{setSavingCarpool(false)}
   }
   async function saveLoserWishes(){
     setErr("");setSavingCarpool(true);
-    await onSaveCarpool(event.id,memberId,{carpoolWishes:loserWishes.slice(0,2)});
-    setSavingCarpool(false);
+    try{await onSaveCarpool(event.id,memberId,{carpoolWishes:loserWishes.slice(0,2)})}
+    catch(e){setErr(e.message)}finally{setSavingCarpool(false)}
   }
   function toggleWish(mp){
     setLoserWishes(prev=>{
@@ -1076,7 +1102,7 @@ function EventScreen({event,roster,responses,lottery,onBack,onSubmit,onNav,onCar
       </div>}
       {event.attachments&&event.attachments.length>0&&<div style={{marginBottom:10}}>
         <div style={{fontSize:11,color:C.dim,marginBottom:6}}>📎 資料リンク</div>
-        {event.attachments.map(a=><a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" style={{display:"block",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"10px 12px",marginBottom:4,color:C.limeLight,fontSize:13,textDecoration:"none",fontWeight:700}}>🔗 {a.name||"リンク"}</a>)}
+        {event.attachments.map(a=><a key={a.id} href={safeLinkUrl(a.url)||undefined} aria-disabled={!safeLinkUrl(a.url)} title={safeLinkUrl(a.url)?undefined:"安全でないURLのため開けません"} target="_blank" rel="noopener noreferrer" style={{display:"block",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"10px 12px",marginBottom:4,color:C.limeLight,fontSize:13,textDecoration:"none",fontWeight:700}}>🔗 {a.name||"リンク"}{!safeLinkUrl(a.url)&&"（無効なURL）"}</a>)}
       </div>}
       {event.matchDate&&<div style={{marginTop:4}}>
         <div style={{fontSize:11,color:C.dim,marginBottom:6}}>📅 カレンダーに追加</div>
@@ -1534,15 +1560,16 @@ function AdminScreen({roster,events,allResponses,allLotteries,onSelectEvent,onSa
         <div>
           <div style={{fontSize:11,color:C.dim,marginBottom:4}}>📎 資料リンク（Google ドライブ等の共有URL）</div>
           {(editEv.attachments||[]).map(a=><div key={a.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"8px 12px",marginBottom:6}}>
-            <a href={a.url} target="_blank" rel="noopener noreferrer" style={{color:C.limeLight,fontSize:13,textDecoration:"none",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {a.name||"リンク"}</a>
+            <a href={safeLinkUrl(a.url)||undefined} aria-disabled={!safeLinkUrl(a.url)} title={safeLinkUrl(a.url)?undefined:"安全でないURLのため開けません"} target="_blank" rel="noopener noreferrer" style={{color:C.limeLight,fontSize:13,textDecoration:"none",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {a.name||"リンク"}{!safeLinkUrl(a.url)&&"（無効なURL）"}</a>
             <button onClick={()=>updateEv("attachments",(editEv.attachments||[]).filter(x=>x.id!==a.id))} style={{background:"rgba(239,68,68,0.15)",border:"none",color:"rgba(248,113,113,0.7)",fontSize:14,cursor:"pointer",padding:"4px 10px",borderRadius:6,marginLeft:8}}>×</button>
           </div>)}
           <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
             <input value={attName} onChange={e=>setAttName(e.target.value)} placeholder="表示名（例：試合要綱）" style={{...S.input,flex:"1 1 130px",fontSize:13,padding:"8px 10px"}} autoComplete="off"/>
             <input value={attUrl} onChange={e=>setAttUrl(e.target.value)} placeholder="https://..." style={{...S.input,flex:"1 1 130px",fontSize:13,padding:"8px 10px"}} autoComplete="off"/>
             <button onClick={()=>{
-              if(!attUrl.trim()){alert("URLを入力してください");return}
-              const next=[...(editEv.attachments||[]),{id:uid(),name:attName.trim()||"リンク",url:attUrl.trim()}];
+              const safeUrl=safeLinkUrl(attUrl);
+              if(!safeUrl){alert("http:// または https:// で始まる有効なURLを入力してください");return}
+              const next=[...(editEv.attachments||[]),{id:uid(),name:attName.trim()||"リンク",url:safeUrl}];
               updateEv("attachments",next);setAttName("");setAttUrl("");
             }} style={{...S.btnSm,background:C.lime,color:"#052e16"}}>＋追加</button>
           </div>
@@ -2080,13 +2107,11 @@ function App(){
 
   useEffect(()=>{loadAll();const t=setInterval(loadAll,30000);return()=>clearInterval(t)},[]);
 
-  async function handleSaveRoster(ro){editingRef.current=false;setRoster(ro);await fbSet("roster",ro)}
-  async function handleSaveRoster(ro){editingRef.current=false;setRoster(ro);await fbSet("roster",ro)}
+  async function handleSaveRoster(ro){await fbSet("roster",ro);editingRef.current=false;setRoster(ro)}
   async function handleSaveEvent(ev){
-    editingRef.current=false;
     const prevEv=events.find(e=>e.id===ev.id);
     const next=prevEv?events.map(e=>e.id===ev.id?ev:e):[...events,ev];
-    setEvents(next);await fbSet("events",next);
+    await fbSet("events",next);editingRef.current=false;setEvents(next);
     if(!allResponses[ev.id])setAllResponses(p=>({...p,[ev.id]:{}}));
     // 駐車場台数の増減があり、すでに抽選済みなら自動で再抽選フローを起動
     const lott=allLotteries[ev.id];
@@ -2143,7 +2168,7 @@ function App(){
     }
   }
   async function handleDeleteEvent(id){
-    const next=events.filter(e=>e.id!==id);setEvents(next);await fbSet("events",next);
+    const next=events.filter(e=>e.id!==id);await fbSet("events",next);setEvents(next);
     setAllResponses(p=>{const n={...p};delete n[id];return n});
     setAllLotteries(p=>{const n={...p};delete n[id];return n});
     await Promise.all([fbDel(`responses/${id}`),fbDel(`lotteries/${id}`)]);
@@ -2299,7 +2324,19 @@ function App(){
   </div>);
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+function SaveErrorNotice(){
+  const[message,setMessage]=useState("");
+  useEffect(()=>{
+    const onError=e=>setMessage(e.detail);
+    const onRejection=e=>{if(e.reason?.parkingWriteError)e.preventDefault()};
+    window.addEventListener("parking-write-error",onError);
+    window.addEventListener("unhandledrejection",onRejection);
+    return()=>{window.removeEventListener("parking-write-error",onError);window.removeEventListener("unhandledrejection",onRejection)};
+  },[]);
+  if(!message)return null;
+  return <div role="alert" style={{position:"fixed",top:12,left:12,right:12,maxWidth:520,margin:"0 auto",zIndex:10000,background:"#7f1d1d",color:"#fff",border:"1px solid #f87171",borderRadius:12,padding:16,fontSize:14,lineHeight:1.6}}>{message}<button onClick={()=>setMessage("")} style={{display:"block",marginTop:8,padding:"6px 12px",cursor:"pointer"}}>閉じる</button></div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(React.Fragment,null,React.createElement(App),React.createElement(SaveErrorNotice)));
   </script>
 </body>
 </html>
