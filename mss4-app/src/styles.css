@@ -101,16 +101,21 @@ ul { margin: 0; padding: 0; list-style: none; }
 .auth-status { max-width: 960px; margin: 6px auto 0; display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .auth-status.is-coach { color: var(--brand-dark); font-weight: 700; }
 
-.tabs { position: sticky; top: 0; z-index: 20; background: #ffffffeb; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; background: #ffffffF2; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -4px 16px #15343b12; }
 .tabs-inner { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); }
-.tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 54px; padding: 6px 4px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 700; border-bottom: 3px solid transparent; text-align: center; }
-.tab-emoji { font-size: 18px; line-height: 1.2; }
-.tab[aria-current="page"] { color: var(--brand-dark); border-bottom-color: var(--brand); }
-@media (min-width: 640px) {
-  .tab { flex-direction: row; gap: 8px; font-size: 15px; }
+.tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 58px; padding: 6px 4px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 700; text-align: center; }
+.tab-emoji { position: relative; display: grid; place-items: center; width: 44px; height: 28px; border-radius: 14px; font-size: 18px; line-height: 1; }
+.tab[aria-current="page"] { color: var(--brand-dark); }
+.tab[aria-current="page"] .tab-emoji { background: var(--mint); }
+.tab-count { position: absolute; top: -4px; right: -2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #e5484d; color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; }
+@media (min-width: 768px) {
+  .tabs { position: sticky; top: 0; bottom: auto; border-top: 0; border-bottom: 1px solid var(--line); box-shadow: none; padding-bottom: 0; }
+  .tab { flex-direction: row; gap: 8px; font-size: 15px; min-height: 54px; border-bottom: 3px solid transparent; }
+  .tab[aria-current="page"] { border-bottom-color: var(--brand); }
 }
 
-.main { max-width: 960px; margin: 0 auto; padding: 18px 16px calc(48px + env(safe-area-inset-bottom)); display: grid; gap: 18px; }
+.main { max-width: 960px; margin: 0 auto; padding: 18px 16px calc(96px + env(safe-area-inset-bottom)); display: grid; gap: 18px; }
+@media (min-width: 768px) { .main { padding-bottom: 48px; } }
 .dev-banner { justify-self: start; font-size: 12px; font-weight: 700; color: var(--warn); background: var(--warn-bg); border: 1px dashed #e4b660; border-radius: 6px; padding: 2px 8px; }
 .loading { color: var(--muted); }
 
@@ -173,7 +178,10 @@ ul { margin: 0; padding: 0; list-style: none; }
 .update-item span { display: grid; }
 .update-item small { color: var(--muted); }
 
-.upcoming-grid { display: grid; gap: 10px; }
+.upcoming-grid { display: grid; gap: 12px; }
+.upcoming-wrap { display: grid; gap: 0; align-content: start; }
+.upcoming-wrap .upcoming-card { position: relative; }
+.upcoming-wrap:has(.card-actions) .upcoming-card { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 @media (min-width: 760px) { .upcoming-grid { grid-template-columns: 1.3fr 1fr 1fr; } }
 .upcoming-card { display: grid; align-content: start; gap: 6px; text-align: left; background: var(--white); border: 1px solid var(--line); border-left: 5px solid #9fb3b0; border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
 .upcoming-card:hover { background: #f8fbfa; }
@@ -439,3 +447,55 @@ textarea.input { min-height: 0; resize: vertical; line-height: 1.6; }
 .doc-line { display: grid; gap: 2px; font-size: 14px; }
 .doc-line span { font-size: 11.5px; color: var(--muted); font-weight: 700; }
 .doc-open { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 44px; border: 1px solid #b9dcd5; border-radius: 10px; background: #f3faf8; color: var(--brand-dark); font-weight: 800; }
+
+/* ── 近道チップ（予定カード → 駐車場・要項） ── */
+.card-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; background: #f7faf9; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); }
+.chip-link { display: inline-flex; align-items: center; gap: 2px; min-height: 36px; padding: 4px 10px 4px 12px; border-radius: 18px; border: 1px solid transparent; font-size: 13px; font-weight: 800; }
+.chip-link.is-docs { background: #eef3ff; color: #2f4a9a; }
+.chip-link.is-add { background: #fff; border: 1px dashed #9fb3b0; color: var(--muted); }
+
+/* ── 予定の画面：見出し＋「概要／駐車場／要項」 ── */
+.detail-hero { display: grid; gap: 6px; background: var(--white); border: 1px solid var(--line); border-top: 5px solid #9fb3b0; border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow); }
+.detail-hero.hero-match { border-top-color: #5b67c7; }
+.detail-hero.hero-practice { border-top-color: #3f9b62; }
+.hero-meta { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.detail-hero .coach-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.sec-tabs { position: sticky; top: 0; z-index: 15; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; background: #e7eeed; border-radius: 14px; }
+.sec-tabs.two { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 768px) { .sec-tabs { top: 58px; } }
+.sec-tabs button { display: grid; gap: 1px; justify-items: center; min-height: 52px; padding: 6px 4px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-weight: 800; font-size: 14px; }
+.sec-tabs button small { font-size: 11px; font-weight: 700; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sec-tabs button.is-on small { color: var(--brand-dark); }
+.sec-tabs button.phase-closed small { color: var(--warn); }
+.sec-tabs button[aria-current="page"] { background: var(--white); color: var(--ink); box-shadow: 0 1px 3px #15343b26; }
+.setup-toggle { justify-self: start; }
+
+/* ── その場で設定（駐車場台数・要項） ── */
+.setup-card { display: grid; gap: 12px; background: #f3faf8; border: 1px solid #b9dcd5; border-radius: 14px; padding: 14px; }
+.setup-title { font-weight: 900; font-size: 16px; color: var(--brand-dark); }
+.setup-row { display: grid; gap: 6px; }
+.setup-label { font-size: 13px; font-weight: 800; color: var(--muted); }
+.docs-sec { display: grid; gap: 12px; }
+
+/* ── 駐車場タブ・要項タブ ── */
+.lead { color: var(--muted); font-size: 14px; margin-top: -8px; }
+.coach-box { display: grid; gap: 8px; background: #fffdf5; border: 1px dashed #e4b660; border-radius: 14px; padding: 12px; }
+.coach-box-title { font-size: 15px; font-weight: 900; color: var(--warn); }
+.quick-list { display: grid; gap: 6px; }
+.quick-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; text-align: left; background: var(--white); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 52px; }
+.quick-date { display: grid; gap: 0; line-height: 1.25; }
+.quick-date b { font-size: 14px; }
+.quick-date small { font-size: 11.5px; color: var(--brand-dark); font-weight: 700; }
+.quick-main { display: grid; gap: 2px; justify-items: start; min-width: 0; }
+.quick-main b { font-size: 14px; overflow-wrap: anywhere; }
+.quick-action { display: inline-flex; align-items: center; gap: 2px; color: var(--brand-dark); font-weight: 800; font-size: 13px; white-space: nowrap; }
+.doc-grid { display: grid; gap: 10px; }
+@media (min-width: 700px) { .doc-grid { grid-template-columns: 1fr 1fr; } }
+.doc-grid .doc-card { margin-bottom: 0; }
+button.doc-card { text-align: left; width: 100%; }
+.doc-card .doc-card-head { align-items: center; }
+.doc-title { font-size: 17px; font-weight: 900; overflow-wrap: anywhere; }
+.doc-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.doc-thumbs img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: #eef2f2; }
+.doc-more { display: grid; place-items: center; border-radius: 8px; background: #eef2f2; color: var(--muted); font-weight: 800; }
+.doc-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); font-weight: 700; }

@@ -3,6 +3,7 @@ import { CONFIG_ERROR, TARGET } from "./lib/config";
 import { GRADE_LABELS, parseGrade, type GradeCode, type Role } from "./lib/grade";
 import { tabOf, useRoute } from "./lib/route";
 import { logOut, useSession } from "./lib/session";
+import { hasParking } from "./lib/matches";
 import { useTeamData } from "./lib/teamData";
 import { TeamProvider } from "./lib/teamContext";
 import { AppHeader } from "./components/AppHeader";
@@ -34,6 +35,13 @@ function Shell({ grade, role }: { grade: GradeCode; role: Role }) {
   const [coachLogin, setCoachLogin] = useState(false);
   const [changingPassphrase, setChangingPassphrase] = useState(false);
   const coach = role === "coach";
+  // 下のタブに出す件数：締切前で受付中の駐車場抽選
+  const counts = useMemo(() => {
+    if (!data) return {};
+    const now = Date.now();
+    const open = data.events.filter((e) => hasParking(e) && !data.lotteries[e.id] && (e.parking.deadlineAt === null || now < e.parking.deadlineAt) && e.status !== "canceled");
+    return { parking: open.length };
+  }, [data]);
 
   // コーチとしてログインできたらダイアログを閉じる
   useEffect(() => {
@@ -45,13 +53,13 @@ function Shell({ grade, role }: { grade: GradeCode; role: Role }) {
     case "home": view = <HomeView />; break;
     case "parking": view = <ParkingView />; break;
     case "tournaments": view = <DocsView />; break;
-    case "event": view = <EventDetailView key={route.id} id={route.id} onBack={() => back({ name: route.from ?? "home" })} />; break;
+    case "event": view = <EventDetailView key={route.id} id={route.id} section={route.section} from={route.from} onBack={() => back({ name: route.from ?? "home" })} />; break;
   }
 
   return (
     <div className="app">
       <AppHeader grade={grade} role={role} onCoachLogin={() => setCoachLogin(true)} onChangePassphrase={() => setChangingPassphrase(true)} onLogout={() => void logOut()} />
-      <TabNav current={tabOf(route)} onSelect={(tab) => navigate({ name: tab })} />
+      <TabNav current={tabOf(route)} counts={counts} onSelect={(tab) => navigate({ name: tab })} />
       <main className="main" id="main">
         {TARGET === "emulator" && <p className="dev-banner">開発用（ローカルのテスト環境）</p>}
         {error && <div className="alert alert-error" role="alert">{error}</div>}

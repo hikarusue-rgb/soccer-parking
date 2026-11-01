@@ -1,27 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type TabName = "home" | "parking" | "tournaments";
+/** 予定の中のページ（概要・駐車場・要項） */
+export type EventSection = "info" | "parking" | "docs";
 export type Route =
   | { name: TabName }
-  | { name: "event"; id: string; from?: TabName };
+  | { name: "event"; id: string; section?: EventSection; from?: TabName };
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** `#home` `#parking` `#tournaments` `#event/{id}` */
+/** `#home` `#parking` `#tournaments` `#event/{id}` `#event/{id}/parking` `#event/{id}/docs` */
 export function parseRoute(hash: string): Route {
-  const [head = "", id = ""] = hash.replace(/^#\/?/, "").split("/");
+  const [head = "", id = "", section = ""] = hash.replace(/^#\/?/, "").split("/");
   if (head === "home" || head === "parking" || head === "tournaments") return { name: head };
-  if (head === "event" && ID.test(id)) return { name: "event", id };
+  if (head === "event" && ID.test(id)) {
+    return section === "parking" || section === "docs" ? { name: "event", id, section } : { name: "event", id };
+  }
   return { name: "home" };
 }
 
 export function routeToHash(route: Route): string {
-  return route.name === "event" ? `#event/${route.id}` : `#${route.name}`;
+  if (route.name !== "event") return `#${route.name}`;
+  return route.section && route.section !== "info" ? `#event/${route.id}/${route.section}` : `#event/${route.id}`;
 }
 
 /** 詳細画面を開いているときに、どのタブを選択中として見せるか */
 export function tabOf(route: Route): TabName {
-  if (route.name === "event") return route.from ?? "home";
+  if (route.name === "event") return route.from ?? (route.section === "parking" ? "parking" : route.section === "docs" ? "tournaments" : "home");
   return route.name;
 }
 
@@ -45,13 +50,13 @@ export function useRoute() {
     };
   }, []);
 
-  const navigate = useCallback((next: Route, options: { replace?: boolean } = {}) => {
+  const navigate = useCallback((next: Route, options: { replace?: boolean; keepScroll?: boolean } = {}) => {
     const state: HistoryState = { mss: true, ...(next.name === "event" && next.from ? { from: next.from } : {}) };
     const hash = routeToHash(next);
     if (options.replace) window.history.replaceState(state, "", hash);
     else window.history.pushState(state, "", hash);
     setRoute(next);
-    window.scrollTo({ top: 0 });
+    if (!options.keepScroll) window.scrollTo({ top: 0 });
   }, []);
 
   /** アプリ内で開いた画面なら1つ戻る。LINE などから直接開いた場合は fallback へ */

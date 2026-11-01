@@ -4,6 +4,7 @@ import { addDays, dayLabel, jstToday, relativeDay, shiftMonth, dateTimeLabel } f
 import { timeSummary } from "../lib/eventView";
 import { blankDraft, type EventDraft } from "../lib/eventForm";
 import { createIcs, downloadIcs } from "../lib/ics";
+import type { EventSection } from "../lib/route";
 import { useTeam } from "../lib/teamContext";
 import type { TeamEvent } from "../lib/types";
 import { EventBadges } from "../components/EventBadges";
@@ -27,7 +28,7 @@ export function HomeView() {
   );
   const monthEvents = events.filter((e) => e.date.startsWith(month));
   const listed = day ? events.filter((e) => e.date === day) : view === "list" ? monthEvents : [];
-  const open = (e: TeamEvent) => t.navigate({ name: "event", id: e.id, from: "home" });
+  const open = (e: TeamEvent, section?: EventSection) => t.navigate({ name: "event", id: e.id, section, from: "home" });
 
   function changeMonth(delta: number | "today") {
     setMonth(delta === "today" ? today.slice(0, 7) : shiftMonth(month, delta));
@@ -85,16 +86,36 @@ export function HomeView() {
           <div className="empty">これから90日以内の予定はまだありません。</div>
         ) : (
           <div className="upcoming-grid">
-            {upcoming.map((e, i) => (
-              <button key={e.id} className={`upcoming-card upcoming-${e.kind} ${i === 0 ? "is-first" : ""} ${e.status === "canceled" ? "is-canceled" : ""}`} onClick={() => open(e)}>
-                <span className="upcoming-date"><b>{dayLabel(e.date)}</b><small>{relativeDay(e.date, today)}</small></span>
-                <EventBadges event={e} unread={t.isUnread(e)} parking={t.parkingOf(e)} hasDocs={t.hasDocs(e)} />
-                <span className="upcoming-title">{e.title}</span>
-                <span className="event-meta"><Clock size={15} aria-hidden="true" />{timeSummary(e)}</span>
-                <span className="event-meta"><MapPin size={15} aria-hidden="true" />{e.venue || "場所未定"}</span>
-                <span className="upcoming-link">詳細を見る<ChevronRight size={16} aria-hidden="true" /></span>
-              </button>
-            ))}
+            {upcoming.map((e, i) => {
+              const parking = t.parkingOf(e);
+              const docs = t.hasDocs(e);
+              const canPark = e.kind !== "notice";
+              return (
+                <div key={e.id} className={`upcoming-wrap ${i === 0 ? "is-first" : ""}`}>
+                  <button className={`upcoming-card upcoming-${e.kind} ${i === 0 ? "is-first" : ""} ${e.status === "canceled" ? "is-canceled" : ""}`} onClick={() => open(e)}>
+                    <span className="upcoming-date"><b>{dayLabel(e.date)}</b><small>{relativeDay(e.date, today)}</small></span>
+                    <EventBadges event={e} unread={t.isUnread(e)} />
+                    <span className="upcoming-title">{e.title}</span>
+                    <span className="event-meta"><Clock size={15} aria-hidden="true" />{timeSummary(e)}</span>
+                    <span className="event-meta"><MapPin size={15} aria-hidden="true" />{e.venue || "場所未定"}</span>
+                  </button>
+                  {(parking || docs || (t.coach && canPark)) && (
+                    <div className="card-actions">
+                      {parking ? (
+                        <button className={`chip-link parking-${parking.phase}`} onClick={() => open(e, "parking")}>{parking.label}<ChevronRight size={15} aria-hidden="true" /></button>
+                      ) : t.coach && canPark && (
+                        <button className="chip-link is-add" onClick={() => open(e, "parking")}>🚗 駐車場を設定</button>
+                      )}
+                      {docs ? (
+                        <button className="chip-link is-docs" onClick={() => open(e, "docs")}>📄 要項<ChevronRight size={15} aria-hidden="true" /></button>
+                      ) : t.coach && canPark && (
+                        <button className="chip-link is-add" onClick={() => open(e, "docs")}>📄 要項を追加</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>

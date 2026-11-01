@@ -1,24 +1,27 @@
 import { useState } from "react";
-import { ChevronLeft, Copy, Pencil, Share2 } from "lucide-react";
+import { ChevronLeft, Clock, Copy, MapPin, Pencil, Settings2, Share2 } from "lucide-react";
 import { dateTimeLabel, dayLabel, jstToday, relativeDay } from "../lib/datetime";
 import { draftFromEvent, type EventDraft } from "../lib/eventForm";
-import { isInactive } from "../lib/eventView";
+import { isInactive, timeSummary } from "../lib/eventView";
+import type { EventSection, TabName } from "../lib/route";
 import { createIcs, downloadIcs, googleCalendarUrl } from "../lib/ics";
 import { useTeam } from "../lib/teamContext";
 import { STATUS_LABELS, type TeamEvent } from "../lib/types";
-import { AttachmentList } from "../components/AttachmentList";
 import { ChangeHistory } from "../components/ChangeHistory";
 import { EventBadges } from "../components/EventBadges";
 import { EventEditor } from "../components/EventEditor";
 import { ParkingSection } from "../components/ParkingSection";
+import { ParkingSetup } from "../components/ParkingSetup";
+import { DocsSection } from "../components/DocsSection";
 
 const mapUrl = (q: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 
-export function EventDetailView({ id, onBack }: { id: string; onBack: () => void }) {
+export function EventDetailView({ id, section = "info", from, onBack }: { id: string; section?: EventSection; from?: TabName; onBack: () => void }) {
   const t = useTeam();
   const event = t.data.events.find((e) => e.id === id);
   const [editor, setEditor] = useState<EventDraft | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [setup, setSetup] = useState(false);
 
   if (!event) {
     return (
@@ -31,7 +34,12 @@ export function EventDetailView({ id, onBack }: { id: string; onBack: () => void
 
   const today = jstToday(t.now);
   const isMatch = event.kind === "match";
-  const hasParking = event.kind !== "notice" && event.parking.mode === "lottery" && event.parking.limit > 0;
+  const canPark = event.kind !== "notice";
+  const hasParking = canPark && event.parking.mode === "lottery" && event.parking.limit > 0;
+  const parking = t.parkingOf(event);
+  const hasDocText = Boolean(event.details.format || event.details.referee || event.details.venueNotes);
+  const current: EventSection = section === "parking" && !canPark ? "info" : section;
+  const go = (next: EventSection) => t.navigate({ name: "event", id: event.id, section: next, from }, { replace: true, keepScroll: true });
 
   async function share(e: TeamEvent) {
     const url = t.eventUrl(e);
@@ -42,24 +50,29 @@ export function EventDetailView({ id, onBack }: { id: string; onBack: () => void
         return;
       }
       await navigator.clipboard.writeText(`${text}\n${url}`);
-      setNotice("この試合のリンクをコピーしました。LINEに貼り付けて共有できます。");
+      setNotice("この予定のリンクをコピーしました。LINEに貼り付けて共有できます。");
     } catch {
       /* 共有をキャンセルした場合など */
     }
   }
 
+  const parkingSub = hasParking ? (parking ? parking.label.replace("🚗 ", "") : `${event.parking.limit}台`) : t.coach ? "＋設定する" : "なし";
+  const docsSub = event.attachments.length ? `資料${event.attachments.length}件` : hasDocText ? "あり" : t.coach ? "＋追加する" : "未着";
+
   return (
     <article className="detail">
       <button className="back-link" onClick={onBack}><ChevronLeft size={18} aria-hidden="true" />一覧</button>
 
-      <header className="detail-head">
+      <header className={`detail-hero hero-${event.kind}`}>
         <p className="detail-date">{dayLabel(event.date)}<small>{relativeDay(event.date, today)}</small></p>
-        <EventBadges event={event} unread={t.isUnread(event)} parking={t.parkingOf(event)} hasDocs={t.hasDocs(event)} />
+        <EventBadges event={event} unread={t.isUnread(event)} />
         <h1 className={`detail-title ${event.status === "canceled" ? "is-canceled" : ""}`}>{event.title}</h1>
+        <p className="hero-meta"><Clock size={15} aria-hidden="true" />{timeSummary(event)}</p>
+        <p className="hero-meta"><MapPin size={15} aria-hidden="true" />{event.venue || "場所未定"}</p>
         {t.coach && (
           <div className="coach-actions">
-            <button className="btn btn-primary" onClick={() => setEditor(draftFromEvent(event))}><Pencil size={16} aria-hidden="true" />{isMatch ? "試合を編集" : "予定を編集"}</button>
-            <button className="btn" onClick={() => setEditor(draftFromEvent(event, { duplicate: true }))}><Copy size={16} aria-hidden="true" />複製</button>
+            <button className="btn btn-small" onClick={() => setEditor(draftFromEvent(event))}><Pencil size={15} aria-hidden="true" />{isMatch ? "試合を編集" : "予定を編集"}</button>
+            <button className="btn btn-small" onClick={() => setEditor(draftFromEvent(event, { duplicate: true }))}><Copy size={15} aria-hidden="true" />複製</button>
           </div>
         )}
       </header>
@@ -68,18 +81,48 @@ export function EventDetailView({ id, onBack }: { id: string; onBack: () => void
         <div className={`change-banner ${isInactive(event) ? "is-stop" : ""}`}>☔ 開催状況：{STATUS_LABELS[event.status]}{isInactive(event) && "（集合不要・再案内を確認してください）"}</div>
       )}
 
-      <ChangeHistory event={event} />
+      <nav className={`sec-tabs ${canPark ? "" : "two"}`} aria-label="この予定の画面">
+        <button aria-current={current === "info" ? "page" : undefined} onClick={() => go("info")}>
+          <span>📋 概要</span><small>{isMatch ? "時間・会場" : "時間・場所"}</small>
+        </button>
+        {canPark && (
+          <button aria-current={current === "parking" ? "page" : undefined} className={hasParking ? `is-on phase-${parking?.phase ?? "open"}` : ""} onClick={() => go("parking")}>
+            <span>🚗 駐車場</span><small>{parkingSub}</small>
+          </button>
+        )}
+        <button aria-current={current === "docs" ? "page" : undefined} className={event.attachments.length || hasDocText ? "is-on" : ""} onClick={() => go("docs")}>
+          <span>📄 要項</span><small>{docsSub}</small>
+        </button>
+      </nav>
 
-      <Yokou event={event} />
+      {current === "info" && (
+        <>
+          <ChangeHistory event={event} />
+          <Yokou event={event} />
+          <div className="detail-tools">
+            <button className="btn btn-small" onClick={() => share(event)}><Share2 size={15} aria-hidden="true" />この{isMatch ? "試合" : "予定"}をLINEで共有</button>
+          </div>
+          {notice && <p className="alert alert-info" role="status">{notice}</p>}
+          <p className="updated">更新 {event.updatedAt ? dateTimeLabel(event.updatedAt) : "—"}・{event.updatedBy}</p>
+        </>
+      )}
 
-      {hasParking ? <ParkingSection event={event} /> : isMatch && <p className="muted center">🚗 この試合は駐車場の抽選はありません。</p>}
+      {current === "parking" && (
+        hasParking ? (
+          <>
+            {t.coach && (setup
+              ? <ParkingSetup event={event} onDone={() => setSetup(false)} />
+              : <button className="btn btn-small setup-toggle" onClick={() => setSetup(true)}><Settings2 size={15} aria-hidden="true" />台数・締切を変更（いま{event.parking.limit}台）</button>)}
+            <ParkingSection event={event} />
+          </>
+        ) : t.coach ? (
+          <ParkingSetup event={event} />
+        ) : (
+          <div className="empty">🚗 この{isMatch ? "試合" : "予定"}は駐車場の抽選はありません。</div>
+        )
+      )}
 
-      <div className="detail-tools">
-        <button className="btn btn-small" onClick={() => share(event)}><Share2 size={15} aria-hidden="true" />この{isMatch ? "試合" : "予定"}をLINEで共有</button>
-      </div>
-      {notice && <p className="alert alert-info" role="status">{notice}</p>}
-
-      <p className="updated">更新 {event.updatedAt ? dateTimeLabel(event.updatedAt) : "—"}・{event.updatedBy}</p>
+      {current === "docs" && <DocsSection event={event} />}
 
       {editor && (
         <EventEditor
@@ -105,11 +148,11 @@ function Yokou({ event: e }: { event: TeamEvent }) {
     ["🏁 終了予定", e.end],
   ].filter(([, v]) => v) as [string, string][];
   const hasUniform = Boolean(u.top || u.bottom || u.socks);
-  const hasAny = Boolean(e.opponent || e.venue || times.length || hasUniform || e.note || e.messages.length || e.attachments.length || e.details.format || e.details.referee || e.details.venueNotes);
+  const hasAny = Boolean(e.opponent || e.venue || times.length || hasUniform || e.note || e.messages.length);
 
   return (
     <section className="yokou" aria-labelledby="yokou-title">
-      <h2 id="yokou-title">📋 {isMatch ? "要項" : "詳細"}</h2>
+      <h2 id="yokou-title">📋 {isMatch ? "試合の概要" : "詳細"}</h2>
       {e.opponent && e.opponent !== e.title && (
         <div className="yk-item"><small>🆚 対戦相手</small><b>{e.opponent}</b></div>
       )}
@@ -136,9 +179,6 @@ function Yokou({ event: e }: { event: TeamEvent }) {
           </div>
         </div>
       )}
-      {e.details.format && <div className="yk-item"><small>⚽ 試合形式</small><b>{e.details.format}</b></div>}
-      {e.details.referee && <div className="yk-item"><small>🟨 審判割当</small><p className="preline">{e.details.referee}</p></div>}
-      {e.details.venueNotes && <div className="yk-item"><small>⚠️ 会場・駐車の注意事項</small><p className="preline">{e.details.venueNotes}</p></div>}
       {(e.messages.length > 0 || e.note) && (
         <div className="yk-item">
           <small>📝 備考・チームからの連絡</small>
@@ -147,12 +187,6 @@ function Yokou({ event: e }: { event: TeamEvent }) {
         </div>
       )}
       {e.equipmentConfirmed && <div className="yk-item"><small>🎒 持ち物</small><b>{e.equipment.join("・") || "指定なし"}</b></div>}
-      {e.attachments.length > 0 && (
-        <div className="yk-item">
-          <small>📄 要項・当日資料</small>
-          <AttachmentList items={e.attachments} />
-        </div>
-      )}
       <div className="yk-item">
         <small>📅 カレンダーに追加</small>
         <div className="inline-row">
@@ -161,7 +195,7 @@ function Yokou({ event: e }: { event: TeamEvent }) {
         </div>
         <p className="muted">※ iPhone の標準カレンダーは .ics をご利用ください</p>
       </div>
-      {!hasAny && <p className="muted center">※ 要項はまだ未入力です</p>}
+      {!hasAny && <p className="muted center">※ 詳細はまだ未入力です</p>}
     </section>
   );
 }

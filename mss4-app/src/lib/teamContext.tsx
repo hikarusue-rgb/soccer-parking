@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { GradeCode, Role } from "./grade";
 import type { Route } from "./route";
 import { isUnread as unreadOf, useSeen } from "./seen";
+import { hasDocs } from "./matches";
 import { parkingSummary, type ParkingSummary } from "./parking";
 import type { TeamData, TeamEvent } from "./types";
 
@@ -11,7 +12,7 @@ export interface TeamContextValue {
   coach: boolean;
   data: TeamData;
   now: number;
-  navigate: (route: Route, options?: { replace?: boolean }) => void;
+  navigate: (route: Route, options?: { replace?: boolean; keepScroll?: boolean }) => void;
   seen: Record<string, number>;
   markSeen: (eventId: string, version: number) => void;
   seenStorable: boolean;
@@ -64,7 +65,7 @@ export function TeamProvider({ grade, role, data, navigate, children }: Provider
       grade, role, coach, data, now, navigate, seen, markSeen, seenStorable: storable,
       isUnread: (e) => !coach && unreadOf(e, seen, now),
       parkingOf: (e) => parkingSummary(e, data.entries[e.id], data.lotteries[e.id], now),
-      hasDocs: (e) => e.attachments.length > 0,
+      hasDocs,
       eventUrl: (e) => `${base}#event/${e.id}`,
     };
   }, [grade, role, coach, data, now, navigate, seen, markSeen, storable]);

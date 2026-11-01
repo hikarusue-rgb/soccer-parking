@@ -41,6 +41,16 @@ describe("画面の切り替え（#）", () => {
     expect(tabOf({ name: "event", id: "abc" })).toBe("home");
     expect(tabOf({ name: "event", id: "t", from: "tournaments" })).toBe("tournaments");
   });
+  it("予定の中の駐車場・要項（LINEから直接開ける）", () => {
+    expect(parseRoute("#event/abc/parking")).toEqual({ name: "event", id: "abc", section: "parking" });
+    expect(parseRoute("#event/abc/docs")).toEqual({ name: "event", id: "abc", section: "docs" });
+    expect(parseRoute("#event/abc/other")).toEqual({ name: "event", id: "abc" });
+    expect(routeToHash({ name: "event", id: "abc", section: "parking" })).toBe("#event/abc/parking");
+    expect(routeToHash({ name: "event", id: "abc", section: "info" })).toBe("#event/abc");
+    expect(tabOf({ name: "event", id: "abc", section: "parking" })).toBe("parking");
+    expect(tabOf({ name: "event", id: "abc", section: "docs" })).toBe("tournaments");
+    expect(tabOf({ name: "event", id: "abc", section: "docs", from: "home" })).toBe("home");
+  });
 });
 
 describe("日付（日本時間）", () => {
