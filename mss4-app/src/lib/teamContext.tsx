@@ -3,7 +3,7 @@ import type { GradeCode, Role } from "./grade";
 import type { Route } from "./route";
 import { isUnread as unreadOf, useSeen } from "./seen";
 import { parkingSummary, type ParkingSummary } from "./parking";
-import type { TeamData, TeamEvent, Tournament } from "./types";
+import type { TeamData, TeamEvent } from "./types";
 
 export interface TeamContextValue {
   grade: GradeCode;
@@ -18,7 +18,6 @@ export interface TeamContextValue {
   isUnread: (e: TeamEvent) => boolean;
   parkingOf: (e: TeamEvent) => ParkingSummary | null;
   hasDocs: (e: TeamEvent) => boolean;
-  tournamentOf: (e: TeamEvent) => Tournament | null;
   /** LINE などで共有する予定の固定URL */
   eventUrl: (e: TeamEvent) => string;
 }
@@ -60,14 +59,12 @@ export function TeamProvider({ grade, role, data, navigate, children }: Provider
   const coach = role === "coach";
 
   const value = useMemo<TeamContextValue>(() => {
-    const tournaments = new Map(data.tournaments.map((t) => [t.id, t]));
     const base = `${window.location.origin}${window.location.pathname}${window.location.search}`;
     return {
       grade, role, coach, data, now, navigate, seen, markSeen, seenStorable: storable,
       isUnread: (e) => !coach && unreadOf(e, seen, now),
       parkingOf: (e) => parkingSummary(e, data.entries[e.id], data.lotteries[e.id], now),
-      hasDocs: (e) => e.attachments.length > 0 || Boolean(e.tournamentId && tournaments.get(e.tournamentId)?.attachments.length),
-      tournamentOf: (e) => (e.tournamentId ? tournaments.get(e.tournamentId) ?? null : null),
+      hasDocs: (e) => e.attachments.length > 0,
       eventUrl: (e) => `${base}#event/${e.id}`,
     };
   }, [grade, role, coach, data, now, navigate, seen, markSeen, storable]);

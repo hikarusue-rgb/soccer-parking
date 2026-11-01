@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { onValue, ref } from "firebase/database";
+import { DATA_ROOT } from "./config";
 import { firebase } from "./firebase";
 import type { GradeCode } from "./grade";
 import {
-  compareEvents, toEntry, toEvent, toLottery, toMember, toMeta, toSettings, toTournament,
+  compareEvents, toEntry, toEvent, toLottery, toMember, toMeta, toSettings,
 } from "./normalize";
 import type { Entry, Lottery, TeamData } from "./types";
 
-const PARTS = ["meta", "settings", "events", "tournaments", "members", "entries", "lotteries"] as const;
+const PARTS = ["meta", "settings", "events", "members", "entries", "lotteries"] as const;
 type Part = (typeof PARTS)[number];
 type Raw = Record<string, unknown>;
 
@@ -23,8 +24,6 @@ function build(raw: Partial<Record<Part, unknown>>): TeamData {
     meta: toMeta(raw.meta),
     settings: toSettings(raw.settings),
     events: Object.entries(map(raw.events)).map(([id, e]) => toEvent(id, e)).filter((e) => e.date).sort(compareEvents),
-    tournaments: Object.entries(map(raw.tournaments)).map(([id, t]) => toTournament(id, t))
-      .sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? "") || a.name.localeCompare(b.name, "ja")),
     members: Object.entries(map(raw.members)).map(([id, m]) => toMember(id, m))
       .sort((a, b) => a.order - b.order || a.num - b.num),
     entries,
@@ -45,7 +44,7 @@ export function useTeamData(grade: GradeCode): { data: TeamData | null; error: s
     setError(null);
     const stops = PARTS.map((part) =>
       onValue(
-        ref(db, `mss/${grade}/${part}`),
+        ref(db, `${DATA_ROOT}/${grade}/${part}`),
         (snapshot) => {
           setRaw((prev) => ({ ...prev, [part]: snapshot.val() }));
           setLoaded((prev) => (prev.has(part) ? prev : new Set(prev).add(part)));

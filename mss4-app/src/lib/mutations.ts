@@ -1,5 +1,6 @@
 // データの保存・削除（権限はルール側でも検査される）
 import { child, push, ref, remove, serverTimestamp, set, update } from "firebase/database";
+import { DATA_ROOT } from "./config";
 import { firebase } from "./firebase";
 import type { GradeCode } from "./grade";
 import type { Lottery, Member } from "./types";
@@ -25,12 +26,12 @@ export async function saveEvent(
 ): Promise<string> {
   const { db } = firebase();
   const root = ref(db);
-  const id = draft.id ?? push(child(root, `mss/${grade}/events`)).key!;
+  const id = draft.id ?? push(child(root, `${DATA_ROOT}/${grade}/events`)).key!;
   const stored = toStoredEvent(draft);
-  const historyId = push(child(root, `mss/${grade}/history/${id}`)).key!;
+  const historyId = push(child(root, `${DATA_ROOT}/${grade}/history/${id}`)).key!;
   const updates: Record<string, unknown> = {
-    [`mss/${grade}/events/${id}`]: stored,
-    [`mss/${grade}/history/${id}/${historyId}`]: {
+    [`${DATA_ROOT}/${grade}/events/${id}`]: stored,
+    [`${DATA_ROOT}/${grade}/history/${id}/${historyId}`]: {
       at: serverTimestamp(),
       version: stored.version,
       actor: "コーチ",
@@ -55,7 +56,7 @@ export async function saveEntry(
 ): Promise<void> {
   const { db } = firebase();
   try {
-    await set(ref(db, `mss/${grade}/entries/${eventId}/${memberId}`), {
+    await set(ref(db, `${DATA_ROOT}/${grade}/entries/${eventId}/${memberId}`), {
       attending: entry.attending,
       parkingNeeded: entry.attending && entry.parkingNeeded,
       carpoolCapacity: Math.max(0, Math.min(8, Math.round(entry.carpoolCapacity))),
@@ -74,7 +75,7 @@ export async function saveEntry(
 export async function saveLottery(grade: GradeCode, eventId: string, lottery: Omit<Lottery, "updatedAt"> & { ladder?: unknown }): Promise<void> {
   const { db } = firebase();
   try {
-    await set(ref(db, `mss/${grade}/lotteries/${eventId}`), { ...lottery, updatedAt: serverTimestamp() });
+    await set(ref(db, `${DATA_ROOT}/${grade}/lotteries/${eventId}`), { ...lottery, updatedAt: serverTimestamp() });
   } catch (error) {
     throw explain(error);
   }
@@ -84,7 +85,7 @@ export async function saveLottery(grade: GradeCode, eventId: string, lottery: Om
 export async function clearLottery(grade: GradeCode, eventId: string): Promise<void> {
   const { db } = firebase();
   try {
-    await remove(ref(db, `mss/${grade}/lotteries/${eventId}`));
+    await remove(ref(db, `${DATA_ROOT}/${grade}/lotteries/${eventId}`));
   } catch (error) {
     throw explain(error);
   }
@@ -95,7 +96,7 @@ export async function saveMembers(grade: GradeCode, members: Member[]): Promise<
   const { db } = firebase();
   const updates: Record<string, unknown> = {};
   for (const m of members) {
-    updates[`mss/${grade}/members/${m.id}`] = { num: m.num, name: m.name.trim().slice(0, 40), active: m.active, order: m.order };
+    updates[`${DATA_ROOT}/${grade}/members/${m.id}`] = { num: m.num, name: m.name.trim().slice(0, 40), active: m.active, order: m.order };
   }
   try {
     await update(ref(db), updates);
@@ -106,7 +107,7 @@ export async function saveMembers(grade: GradeCode, members: Member[]): Promise<
 
 export function newMemberId(grade: GradeCode): string {
   const { db } = firebase();
-  return push(child(ref(db), `mss/${grade}/members`)).key!;
+  return push(child(ref(db), `${DATA_ROOT}/${grade}/members`)).key!;
 }
 
 /** 予定と、その予定のエントリー・抽選結果を削除する（変更履歴は残す） */
@@ -114,9 +115,9 @@ export async function deleteEvent(grade: GradeCode, eventId: string): Promise<vo
   const { db } = firebase();
   try {
     await update(ref(db), {
-      [`mss/${grade}/events/${eventId}`]: null,
-      [`mss/${grade}/entries/${eventId}`]: null,
-      [`mss/${grade}/lotteries/${eventId}`]: null,
+      [`${DATA_ROOT}/${grade}/events/${eventId}`]: null,
+      [`${DATA_ROOT}/${grade}/entries/${eventId}`]: null,
+      [`${DATA_ROOT}/${grade}/lotteries/${eventId}`]: null,
     });
   } catch (error) {
     throw explain(error);

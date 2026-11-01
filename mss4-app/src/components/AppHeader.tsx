@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { EllipsisVertical, KeyRound, LogOut, ShieldCheck } from "lucide-react";
+import { TEST_MODE } from "../lib/config";
 import { GRADE_LABELS, type GradeCode, type Role } from "../lib/grade";
 
 interface Props {
@@ -38,7 +39,7 @@ export function AppHeader({ grade, role, onCoachLogin, onChangePassphrase, onLog
             <strong className="brand-grade">{GRADE_LABELS[grade]}</strong>
           </span>
         </div>
-        <div className="header-menu" ref={menuRef}>
+        {!TEST_MODE && <div className="header-menu" ref={menuRef}>
           <button className="icon-btn" aria-label="メニュー" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
             <EllipsisVertical size={20} />
           </button>
@@ -60,9 +61,12 @@ export function AppHeader({ grade, role, onCoachLogin, onChangePassphrase, onLog
               )}
             </div>
           )}
-        </div>
+        </div>}
       </div>
-      {coach && (
+      {TEST_MODE && (
+        <p className="test-banner">🧪 テスト環境です。合言葉なしでコーチの操作も試せます（本番とは別のデータなので、自由に操作して大丈夫です）</p>
+      )}
+      {coach && !TEST_MODE && (
         <p className="auth-status is-coach">
           <ShieldCheck size={15} aria-hidden="true" />
           合言葉で認証済み・コーチ（編集できます）

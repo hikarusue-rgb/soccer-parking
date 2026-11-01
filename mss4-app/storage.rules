@@ -19,5 +19,15 @@ service firebase.storage {
           || request.resource.contentType == 'application/pdf');
       allow delete: if isCoach(grade);
     }
+
+    // テスト環境（/soccer-parking/mss4-test/）：合言葉なしで誰でも試せる。種類と大きさの制限は本番と同じ
+    match /mss_test/{grade}/files/{fileName} {
+      allow read: if true;
+      allow create: if resource == null
+        && request.resource.size < 15 * 1024 * 1024
+        && (request.resource.contentType.matches('image/(jpeg|png|webp|gif)')
+          || request.resource.contentType == 'application/pdf');
+      allow delete: if true;
+    }
   }
 }

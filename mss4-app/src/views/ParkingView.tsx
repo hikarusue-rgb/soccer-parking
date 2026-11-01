@@ -1,127 +1,73 @@
-import { useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
-import { addDays, dateTimeLabel, dayLabel, jstToday, relativeDay, timeLeft } from "../lib/datetime";
-import { cumulativeStats, seasonStartDate } from "../lib/lottery";
-import { useMyMember } from "../lib/myMember";
+import { useState } from "react";
+import { Plus } from "lucide-react";
+import { jstToday } from "../lib/datetime";
+import { blankDraft, type EventDraft } from "../lib/eventForm";
+import { groupMatches, md } from "../lib/matches";
 import { useTeam } from "../lib/teamContext";
 import type { TeamEvent } from "../lib/types";
+import { EventEditor } from "../components/EventEditor";
+import { MatchCard } from "../components/MatchCard";
 import { RosterEditor } from "../components/RosterEditor";
 
+/** 🚗 駐車場抽選：旧アプリと同じく、試合ごとのカードから試合の画面（要項・駐車場の申込）へ進む */
 export function ParkingView() {
   const t = useTeam();
   const today = jstToday(t.now);
-  const [myId, setMyId] = useMyMember(t.grade);
+  const g = groupMatches(t.data.events, today);
+  const [showOthers, setShowOthers] = useState(false);
   const [showPast, setShowPast] = useState(false);
-  const lotteryEvents = t.data.events.filter((e) => e.parking.mode === "lottery");
-  const upcoming = lotteryEvents.filter((e) => e.date >= today);
-  const past = lotteryEvents.filter((e) => e.date < today).reverse();
-  const activeMembers = t.data.members.filter((m) => m.active);
-  const from = seasonStartDate(today, t.data.settings.seasonStart);
-  // 年度末まで（抽選済みなら、これからの試合も数える）
-  const until = addDays(`${Number(from.slice(0, 4)) + 1}-${t.data.settings.seasonStart}`, -1);
-  const stats = useMemo(
-    () => cumulativeStats(t.data.events, t.data.lotteries, t.data.members, from, until),
-    [t.data.events, t.data.lotteries, t.data.members, from, until],
-  );
-
-  const myStatus = (e: TeamEvent): string | null => {
-    if (!myId) return null;
-    if (e.parking.confirmed.includes(myId)) return "確定枠";
-    const l = t.data.lotteries[e.id];
-    const entry = t.data.entries[e.id]?.[myId];
-    if (l?.winners.includes(myId)) return entry?.parkingNeeded ? "当選" : "当選後に辞退";
-    if (l?.participants.includes(myId)) return "落選";
-    if (!entry) return "未回答";
-    if (!entry.attending) return "欠席";
-    return entry.parkingNeeded ? "車出し希望" : "車なしで参加";
-  };
-
-  const row = (e: TeamEvent) => {
-    const s = t.parkingOf(e);
-    const mine = myStatus(e);
-    return (
-      <li key={e.id}>
-        <button className="event-row" onClick={() => t.navigate({ name: "event", id: e.id, from: "parking" })}>
-          <span className="event-date"><b>{dayLabel(e.date)}</b><small>{relativeDay(e.date, today)}</small></span>
-          <span className="event-main">
-            <span className="badges">{s && <span className={`badge parking-${s.phase}`}>{s.label}</span>}{mine && <span className="badge badge-mine">あなた：{mine}</span>}</span>
-            <b className="event-title">{e.title}</b>
-            {e.parking.deadlineAt && (
-              <span className="event-meta">締切 {dateTimeLabel(e.parking.deadlineAt)}{timeLeft(e.parking.deadlineAt, t.now) ? `（${timeLeft(e.parking.deadlineAt, t.now)}）` : ""}</span>
-            )}
-          </span>
-          <ChevronRight size={18} aria-hidden="true" />
-        </button>
-      </li>
-    );
-  };
+  const [showRoster, setShowRoster] = useState(false);
+  const [editor, setEditor] = useState<EventDraft | null>(null);
+  const open = (e: TeamEvent) => t.navigate({ name: "event", id: e.id, from: "parking" });
+  const cards = (items: TeamEvent[]) => items.map((e) => <MatchCard key={e.id} event={e} onOpen={() => open(e)} />);
 
   return (
     <>
-      <section className="page-head">
-        <div>
-          <p className="eyebrow">PARKING LOTTERY</p>
-          <h1 className="page-title">駐車場抽選</h1>
-        </div>
-      </section>
-
-      <section className="card my-child">
-        <label className="field">
-          <span className="field-label">お子さんの名前（この端末に記憶）</span>
-          <select className="input" value={myId ?? ""} onChange={(e) => setMyId(e.target.value || null)}>
-            <option value="">選んでください</option>
-            {activeMembers.map((m) => <option key={m.id} value={m.id}>#{m.num} {m.name}</option>)}
-          </select>
-        </label>
-        <p className="muted">車出しのエントリーは、各試合の詳細画面からできます。抽選は全員同じ確率のあみだくじです（並び順も毎回ランダム）。</p>
-      </section>
-
-      <section aria-labelledby="open-title">
-        <div className="section-head">
-          <h2 id="open-title" className="section-title">これからの抽選</h2>
-          <span className="section-sub">{upcoming.length}件</span>
-        </div>
-        {upcoming.length ? <ul className="event-list">{upcoming.map(row)}</ul> : (
-          <div className="empty">駐車場抽選のある予定はまだありません。{t.coach && "予定の編集で「抽選あり」にすると、ここに表示されます。"}</div>
+      <section className="parking-hero">
+        <div className="parking-hero-icon" aria-hidden="true">🏆</div>
+        <h1>駐車場 抽選</h1>
+        <p>MSS香澄 4年生</p>
+        {t.coach && (
+          <button className="btn btn-primary" onClick={() => setEditor({ ...blankDraft(today), kind: "match", title: "練習試合（TM）" })}>
+            <Plus size={18} aria-hidden="true" />試合を追加
+          </button>
         )}
       </section>
 
-      {past.length > 0 && (
-        <section aria-labelledby="past-title">
-          <div className="section-head">
-            <h2 id="past-title" className="section-title">これまでの抽選</h2>
-            <button className="btn btn-small btn-ghost" onClick={() => setShowPast((v) => !v)} aria-expanded={showPast}>{showPast ? "閉じる" : `${past.length}件を表示`}</button>
-          </div>
-          {showPast && <ul className="event-list">{past.map(row)}</ul>}
+      <section aria-labelledby="this-week">
+        <h2 id="this-week" className="week-title">🌟 今週の試合（{md(g.thisWeek.from)}・{md(g.thisWeek.to)}）</h2>
+        {g.thisWeek.items.length ? cards(g.thisWeek.items) : <div className="empty">今週の試合はありません</div>}
+      </section>
+
+      <section aria-labelledby="next-week">
+        <h2 id="next-week" className="week-title blue">📅 翌週の試合（{md(g.nextWeek.from)}・{md(g.nextWeek.to)}）</h2>
+        {g.nextWeek.items.length ? cards(g.nextWeek.items) : <div className="empty">翌週の試合はありません</div>}
+      </section>
+
+      {g.others.length > 0 && (
+        <section>
+          <button className="fold-btn" onClick={() => setShowOthers((v) => !v)} aria-expanded={showOthers}>📅 その他の試合（{g.others.length}件） {showOthers ? "▲" : "▼"}</button>
+          {showOthers && <div className="fold-body">{cards(g.others)}</div>}
         </section>
       )}
 
-      <section aria-labelledby="stats-title">
-        <div className="section-head">
-          <h2 id="stats-title" className="section-title">今年度の累計</h2>
-          <span className="section-sub">{from.replaceAll("-", "/")}〜</span>
-        </div>
-        <div className="table-wrap">
-          <table className="stats">
-            <thead>
-              <tr><th scope="col">背番号</th><th scope="col">名前</th><th scope="col">応募</th><th scope="col">当選</th><th scope="col">落選</th><th scope="col">確定枠</th></tr>
-            </thead>
-            <tbody>
-              {activeMembers.map((m) => {
-                const s = stats.get(m.id) ?? { applied: 0, won: 0, lost: 0, confirmed: 0 };
-                return (
-                  <tr key={m.id} className={m.id === myId ? "is-mine" : ""}>
-                    <td>{m.num}</td><th scope="row">{m.name}</th><td>{s.applied}</td><td>{s.won}</td><td>{s.lost}</td><td>{s.confirmed}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="muted">抽選結果から毎回数えています。当選後の辞退も当選に数えます。確定枠（抽選なし）は別に数えます。</p>
-      </section>
+      {g.past.length > 0 && (
+        <section>
+          <button className="fold-btn" onClick={() => setShowPast((v) => !v)} aria-expanded={showPast}>📦 過去の試合（{g.past.length}件） {showPast ? "▲" : "▼"}</button>
+          {showPast && <div className="fold-body">{cards(g.past)}</div>}
+        </section>
+      )}
 
-      {t.coach && <RosterEditor />}
+      {t.coach && (
+        <section>
+          <button className="fold-btn" onClick={() => setShowRoster((v) => !v)} aria-expanded={showRoster}>👦 名簿の管理（コーチ） {showRoster ? "▲" : "▼"}</button>
+          {showRoster && <div className="fold-body"><RosterEditor /></div>}
+        </section>
+      )}
+
+      {editor && (
+        <EventEditor initial={editor} onClose={() => setEditor(null)} onSaved={(id) => { setEditor(null); t.navigate({ name: "event", id, from: "parking" }); }} />
+      )}
     </>
   );
 }

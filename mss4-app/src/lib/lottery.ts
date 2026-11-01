@@ -2,7 +2,7 @@
 // あみだくじは横線の入り方によって列ごとの当たりやすさに偏りが出るため、
 // 参加者の並び順を毎回ランダムにしてから線を引く。これで全員の当選確率が等しくなる。
 import { applicantsOf } from "./parking";
-import type { Entry, Lottery, LotteryReason, Member, TeamEvent } from "./types";
+import type { Entry, Lottery, LotteryReason, TeamEvent } from "./types";
 
 export type Random = () => number;
 
@@ -135,35 +135,4 @@ export function runDraw(plan: DrawPlan, previous: Lottery | undefined, now: numb
       conductedAt: previous?.conductedAt ?? now,
     },
   };
-}
-
-export interface MemberStats { applied: number; won: number; lost: number; confirmed: number }
-
-/** 年度の始まり（例: 04-01）。今日がそれより前なら前年の日付 */
-export function seasonStartDate(today: string, seasonStart = "04-01"): string {
-  const start = `${today.slice(0, 4)}-${seasonStart}`;
-  return today >= start ? start : `${Number(today.slice(0, 4)) - 1}-${seasonStart}`;
-}
-
-/** 累計（応募・当選・落選・確定枠）。保存はせず抽選結果から毎回数える */
-export function cumulativeStats(events: TeamEvent[], lotteries: Record<string, Lottery>, members: Member[], from: string, until: string): Map<string, MemberStats> {
-  const stats = new Map<string, MemberStats>(members.map((m) => [m.id, { applied: 0, won: 0, lost: 0, confirmed: 0 }]));
-  const get = (id: string) => {
-    if (!stats.has(id)) stats.set(id, { applied: 0, won: 0, lost: 0, confirmed: 0 });
-    return stats.get(id)!;
-  };
-  for (const e of events) {
-    if (e.parking.mode !== "lottery" || e.date < from || e.date > until) continue;
-    const l = lotteries[e.id];
-    if (!l) continue;
-    const winners = new Set(l.winners);
-    for (const id of l.participants) {
-      const s = get(id);
-      s.applied++;
-      if (winners.has(id)) s.won++;
-      else s.lost++;
-    }
-    for (const id of e.parking.confirmed) get(id).confirmed++;
-  }
-  return stats;
 }

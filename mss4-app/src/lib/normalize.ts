@@ -1,7 +1,7 @@
 // Realtime Database から読んだ値を、欠けた項目を補って画面用の型にそろえる。
 // （RTDB は null・空配列を保存しないため、読み戻すと項目そのものが無いことがある）
 import type {
-  Attachment, Entry, EventKind, EventStatus, Lottery, LotteryReason, Member, TeamEvent, TeamMeta, TeamSettings, Tournament,
+  Attachment, Entry, EventKind, EventStatus, Lottery, LotteryReason, Member, TeamEvent, TeamMeta, TeamSettings,
 } from "./types";
 
 type Raw = Record<string, unknown>;
@@ -93,25 +93,6 @@ export function toEvent(id: string, value: unknown): TeamEvent {
         ...(str(legacy.parkingEventId) ? { parkingEventId: str(legacy.parkingEventId) } : {}),
       }
       : null,
-  };
-}
-
-export function toTournament(id: string, value: unknown): Tournament {
-  const t = obj(value);
-  const date = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
-  return {
-    id,
-    name: str(t.name) || "（大会名なし）",
-    startDate: date(t.startDate),
-    endDate: date(t.endDate),
-    organizer: str(t.organizer),
-    officialUrl: str(t.officialUrl),
-    regulations: str(t.regulations),
-    notes: str(t.notes),
-    attachments: toAttachments(t.attachments),
-    archived: bool(t.archived),
-    version: num(t.version, 1),
-    updatedAt: num(t.updatedAt),
   };
 }
 

@@ -4,6 +4,12 @@ import type { FirebaseOptions } from "firebase/app";
 export const TARGET: "emulator" | "production" =
   import.meta.env.VITE_FIREBASE_TARGET === "production" ? "production" : "emulator";
 
+/** test: 合言葉なしでコーチの操作も試せるテスト環境（本番とは別のデータ /mss_test を使う） */
+export const APP_MODE: "normal" | "test" = import.meta.env.VITE_APP_MODE === "test" ? "test" : "normal";
+export const TEST_MODE = APP_MODE === "test";
+/** データの置き場所（本番: mss、テスト環境: mss_test） */
+export const DATA_ROOT = TEST_MODE ? "mss_test" : "mss";
+
 /** 合言葉用アカウントのメールアドレスのドメイン（画面には表示しない） */
 export const ACCOUNT_DOMAIN = "soccer-parking.firebaseapp.com";
 

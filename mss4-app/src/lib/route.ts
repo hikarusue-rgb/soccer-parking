@@ -3,28 +3,25 @@ import { useCallback, useEffect, useState } from "react";
 export type TabName = "home" | "parking" | "tournaments";
 export type Route =
   | { name: TabName }
-  | { name: "event"; id: string; from?: TabName }
-  | { name: "tournament"; id: string };
+  | { name: "event"; id: string; from?: TabName };
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** `#home` `#parking` `#tournaments` `#event/{id}` `#tournament/{id}` */
+/** `#home` `#parking` `#tournaments` `#event/{id}` */
 export function parseRoute(hash: string): Route {
   const [head = "", id = ""] = hash.replace(/^#\/?/, "").split("/");
   if (head === "home" || head === "parking" || head === "tournaments") return { name: head };
   if (head === "event" && ID.test(id)) return { name: "event", id };
-  if (head === "tournament" && ID.test(id)) return { name: "tournament", id };
   return { name: "home" };
 }
 
 export function routeToHash(route: Route): string {
-  return route.name === "event" || route.name === "tournament" ? `#${route.name}/${route.id}` : `#${route.name}`;
+  return route.name === "event" ? `#event/${route.id}` : `#${route.name}`;
 }
 
 /** 詳細画面を開いているときに、どのタブを選択中として見せるか */
 export function tabOf(route: Route): TabName {
   if (route.name === "event") return route.from ?? "home";
-  if (route.name === "tournament") return "tournaments";
   return route.name;
 }
 

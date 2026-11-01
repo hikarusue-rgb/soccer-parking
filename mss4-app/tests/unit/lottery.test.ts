@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildLadder, cumulativeStats, ladderResults, ladderWinners, lotteryState, nextDraw, runDraw, seasonStartDate, shuffle,
+  buildLadder, ladderResults, ladderWinners, lotteryState, nextDraw, runDraw, shuffle,
 } from "../../src/lib/lottery.ts";
-import { toEvent, toMember } from "../../src/lib/normalize.ts";
+import { toEvent } from "../../src/lib/normalize.ts";
 import type { Entry, Lottery } from "../../src/lib/types.ts";
 
 /** 再現できる乱数（テスト用） */
@@ -77,26 +77,5 @@ describe("抽選の流れ", () => {
     const lottery: Lottery = { status: "drawn", policy: "random", slots: 2, participants: ["a", "b"], winners: ["a", "b"], rounds: [], conductedAt: 1, updatedAt: 1 };
     expect(nextDraw(event, want(["a", "b"]), lottery)).toBeNull();
     expect(nextDraw(event, {}, undefined)).toBeNull();
-  });
-});
-
-describe("年度の累計", () => {
-  it("年度は4/1始まり", () => {
-    expect(seasonStartDate("2026-11-01")).toBe("2026-04-01");
-    expect(seasonStartDate("2027-03-31")).toBe("2026-04-01");
-    expect(seasonStartDate("2027-04-01")).toBe("2027-04-01");
-  });
-  it("応募・当選・落選・確定枠を数え、年度外は数えない", () => {
-    const e1 = toEvent("e1", { date: "2026-06-01", parking: { mode: "lottery", limit: 2, confirmed: ["c"] } });
-    const e2 = toEvent("e2", { date: "2026-03-01", parking: { mode: "lottery", limit: 2 } });
-    const lotteries: Record<string, Lottery> = {
-      e1: { status: "drawn", policy: "random", slots: 1, participants: ["a", "b"], winners: ["a"], rounds: [], conductedAt: 1, updatedAt: 1 },
-      e2: { status: "drawn", policy: "random", slots: 1, participants: ["a"], winners: ["a"], rounds: [], conductedAt: 1, updatedAt: 1 },
-    };
-    const members = ["a", "b", "c"].map((id) => toMember(id, { num: 1, name: id }));
-    const stats = cumulativeStats([e1, e2], lotteries, members, "2026-04-01", "2026-11-01");
-    expect(stats.get("a")).toEqual({ applied: 1, won: 1, lost: 0, confirmed: 0 });
-    expect(stats.get("b")).toEqual({ applied: 1, won: 0, lost: 1, confirmed: 0 });
-    expect(stats.get("c")).toEqual({ applied: 0, won: 0, lost: 0, confirmed: 1 });
   });
 });

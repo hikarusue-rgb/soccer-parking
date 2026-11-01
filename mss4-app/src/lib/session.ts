@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { FirebaseError } from "firebase/app";
+import { TEST_MODE } from "./config";
 import { firebase } from "./firebase";
 import { accountEmail, roleOf, type GradeCode, type Role } from "./grade";
 
@@ -12,7 +13,8 @@ export function useSession(grade: GradeCode): Session {
   useEffect(() => {
     const { auth } = firebase();
     return onAuthStateChanged(auth, (user) => {
-      const coach = roleOf(user?.email, grade) === "coach";
+      // テスト環境では合言葉なしで全員がコーチの操作を試せる
+      const coach = TEST_MODE || roleOf(user?.email, grade) === "coach";
       setSession({ status: "ready", role: coach ? "coach" : "parent", uid: user?.uid ?? null });
     });
   }, [grade]);

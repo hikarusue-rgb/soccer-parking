@@ -28,7 +28,7 @@ describe("画面の切り替え（#）", () => {
     expect(parseRoute("#parking")).toEqual({ name: "parking" });
     expect(parseRoute("#tournaments")).toEqual({ name: "tournaments" });
     expect(parseRoute("#event/initial-20261024-06")).toEqual({ name: "event", id: "initial-20261024-06" });
-    expect(parseRoute("#tournament/t1")).toEqual({ name: "tournament", id: "t1" });
+    expect(parseRoute("#tournament/t1")).toEqual({ name: "home" });
   });
   it("空・不明・不正なIDは予定タブ", () => {
     expect(parseRoute("")).toEqual({ name: "home" });
@@ -39,7 +39,7 @@ describe("画面の切り替え（#）", () => {
     expect(routeToHash({ name: "event", id: "abc", from: "parking" })).toBe("#event/abc");
     expect(tabOf({ name: "event", id: "abc", from: "parking" })).toBe("parking");
     expect(tabOf({ name: "event", id: "abc" })).toBe("home");
-    expect(tabOf({ name: "tournament", id: "t" })).toBe("tournaments");
+    expect(tabOf({ name: "event", id: "t", from: "tournaments" })).toBe("tournaments");
   });
 });
 

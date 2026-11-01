@@ -58,7 +58,7 @@ export function blankDraft(date: string): EventDraft {
     start: "", end: "", meeting: "", kickoff: "", venue: "", opponent: "",
     uniform: { top: "", bottom: "", socks: "" }, equipment: [], equipmentConfirmed: false, messages: [], note: "",
     tournamentId: "", details: { format: "", referee: "", venueNotes: "" },
-    parkingMode: "none", parkingLimit: 4, deadline: "", confirmed: [], attachments: [], createdAt: null, legacy: null,
+    parkingMode: "none", parkingLimit: 0, deadline: "", confirmed: [], attachments: [], createdAt: null, legacy: null,
   };
 }
 
@@ -72,7 +72,7 @@ export function draftFromEvent(e: TeamEvent, options: { duplicate?: boolean } = 
     venue: e.venue, opponent: e.opponent, uniform: { ...e.uniform },
     equipment: [...e.equipment], equipmentConfirmed: e.equipmentConfirmed, messages: [...e.messages], note: e.note,
     tournamentId: e.tournamentId ?? "", details: { ...e.details },
-    parkingMode: e.parking.mode, parkingLimit: e.parking.limit || 4,
+    parkingMode: e.parking.mode === "lottery" && e.parking.limit > 0 ? "lottery" : "none", parkingLimit: e.parking.mode === "lottery" ? e.parking.limit : 0,
     deadline: e.parking.deadlineAt ? msToLocalInput(e.parking.deadlineAt) : "",
     confirmed: dup ? [] : [...e.parking.confirmed],
     // 複製では資料（ファイル）は引き継がない

@@ -69,6 +69,15 @@ describe("アップロード", () => {
   });
 });
 
+describe("テスト環境（mss_test）", () => {
+  it("誰でも画像・PDFをアップロード・削除できるが、種類と大きさの制限は本番と同じ", async () => {
+    await assertSucceeds(put(guest(), "mss_test/g4/files/t.jpg", 2048, "image/jpeg"));
+    await assertSucceeds(guest().ref("mss_test/g4/files/t.jpg").delete());
+    await assertFails(put(guest(), "mss_test/g4/files/t.html", 100, "text/html"));
+    await assertFails(put(guest(), "mss_test/g4/files/big.pdf", 15 * 1024 * 1024, "application/pdf"));
+  });
+});
+
 describe("削除", () => {
   it("コーチは削除でき、それ以外は削除できない", async () => {
     await assertFails(guest().ref(EXISTING).delete());

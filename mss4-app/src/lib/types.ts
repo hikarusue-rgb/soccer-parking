@@ -75,21 +75,6 @@ export interface TeamEvent {
   legacy: { calendarId?: string; parkingEventId?: string } | null;
 }
 
-export interface Tournament {
-  id: string;
-  name: string;
-  startDate: string | null;
-  endDate: string | null;
-  organizer: string;
-  officialUrl: string;
-  regulations: string;
-  notes: string;
-  attachments: Attachment[];
-  archived: boolean;
-  version: number;
-  updatedAt: number;
-}
-
 export interface Member {
   id: string;
   num: number;
@@ -156,7 +141,6 @@ export interface TeamData {
   meta: TeamMeta;
   settings: TeamSettings;
   events: TeamEvent[];
-  tournaments: Tournament[];
   members: Member[];
   entries: Record<string, Record<string, Entry>>;
   lotteries: Record<string, Lottery>;

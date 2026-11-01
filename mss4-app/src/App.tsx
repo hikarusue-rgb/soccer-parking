@@ -11,9 +11,8 @@ import { ChangePassphrase } from "./components/ChangePassphrase";
 import { TabNav } from "./components/TabNav";
 import { HomeView } from "./views/HomeView";
 import { ParkingView } from "./views/ParkingView";
-import { TournamentsView } from "./views/TournamentsView";
+import { DocsView } from "./views/DocsView";
 import { EventDetailView } from "./views/EventDetailView";
-import { TournamentDetailView } from "./views/TournamentDetailView";
 
 export default function App() {
   const grade = useMemo(() => parseGrade(window.location.search), []);
@@ -45,9 +44,8 @@ function Shell({ grade, role }: { grade: GradeCode; role: Role }) {
   switch (route.name) {
     case "home": view = <HomeView />; break;
     case "parking": view = <ParkingView />; break;
-    case "tournaments": view = <TournamentsView />; break;
+    case "tournaments": view = <DocsView />; break;
     case "event": view = <EventDetailView key={route.id} id={route.id} onBack={() => back({ name: route.from ?? "home" })} />; break;
-    case "tournament": view = <TournamentDetailView key={route.id} id={route.id} onBack={() => back({ name: "tournaments" })} />; break;
   }
 
   return (

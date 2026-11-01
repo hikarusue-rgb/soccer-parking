@@ -1,5 +1,6 @@
 // 予定の変更履歴：保存時に「比較用の要約」を残し、保護者には項目ごとの変更前後を表示する
 import { get, limitToLast, orderByKey, query, ref } from "firebase/database";
+import { DATA_ROOT } from "./config";
 import { firebase } from "./firebase";
 import type { GradeCode } from "./grade";
 import { dateTimeLabel } from "./datetime";
@@ -23,7 +24,6 @@ export interface EventSnapshot {
   equipment: string;
   messages: string;
   note: string;
-  tournament: string;
   format: string;
   referee: string;
   venueNotes: string;
@@ -42,26 +42,26 @@ function parkingText(mode: string, limit: number, deadlineAt: number | null, con
   return `抽選あり・${limit}台${deadlineAt ? `・締切 ${dateTimeLabel(deadlineAt)}` : ""}${confirmed ? `・確定枠 ${confirmed}台` : ""}`;
 }
 
-export function snapshotOfEvent(e: TeamEvent, tournamentName: string): EventSnapshot {
+export function snapshotOfEvent(e: TeamEvent): EventSnapshot {
   return {
     date: e.date, title: e.title, kind: e.kind, status: e.status,
     start: e.start ?? "", end: e.end ?? "", meeting: e.meeting ?? "", kickoff: e.kickoff ?? "",
     venue: e.venue, opponent: e.opponent, uniform: uniformText(e.uniform),
     equipment: e.equipmentConfirmed ? e.equipment.join("・") || "指定なし" : "",
-    messages: e.messages.join("\n"), note: e.note, tournament: tournamentName,
+    messages: e.messages.join("\n"), note: e.note,
     format: e.details.format, referee: e.details.referee, venueNotes: e.details.venueNotes,
     parking: parkingText(e.parking.mode, e.parking.limit, e.parking.deadlineAt, e.parking.confirmed.length),
     files: e.attachments.map((a) => a.label).join("、"),
   };
 }
 
-export function snapshotOfDraft(d: EventDraft, tournamentName: string): EventSnapshot {
+export function snapshotOfDraft(d: EventDraft): EventSnapshot {
   return {
     date: d.date, title: d.title.trim(), kind: d.kind, status: d.status,
     start: d.start, end: d.end, meeting: d.meeting, kickoff: d.kickoff,
     venue: d.venue.trim(), opponent: d.opponent.trim(), uniform: uniformText(d.uniform),
     equipment: d.equipmentConfirmed ? d.equipment.join("・") || "指定なし" : "",
-    messages: d.messages.join("\n"), note: d.note.trim(), tournament: tournamentName,
+    messages: d.messages.join("\n"), note: d.note.trim(),
     format: d.details.format.trim(), referee: d.details.referee.trim(), venueNotes: d.details.venueNotes.trim(),
     parking: parkingText(d.parkingMode, d.parkingLimit, d.deadline ? localInputToMs(d.deadline) : null, d.confirmed.length),
     files: d.attachments.map((a) => a.label).join("、"),
@@ -83,7 +83,6 @@ const FIELDS: [keyof EventSnapshot, string, (v: string) => string][] = [
   ["equipment", "持ち物", (v) => v || "未確認"],
   ["messages", "チームからの連絡", (v) => v || "なし"],
   ["note", "補足", (v) => v || "なし"],
-  ["tournament", "大会", (v) => v || "なし"],
   ["format", "試合形式", (v) => v || "なし"],
   ["referee", "審判割当", (v) => v || "なし"],
   ["venueNotes", "会場・駐車の注意事項", (v) => v || "なし"],
@@ -102,7 +101,7 @@ export function differences(before: Partial<EventSnapshot>, after: Partial<Event
 /** 最新30件の履歴（新しい順）。変化のない保存は表示しない */
 export async function loadHistory(grade: GradeCode, eventId: string): Promise<HistoryItem[]> {
   const { db } = firebase();
-  const snap = await get(query(ref(db, `mss/${grade}/history/${eventId}`), orderByKey(), limitToLast(30)));
+  const snap = await get(query(ref(db, `${DATA_ROOT}/${grade}/history/${eventId}`), orderByKey(), limitToLast(30)));
   const items: HistoryItem[] = [];
   snap.forEach((child) => {
     const v = child.val() as { at?: number; version?: number; actor?: string; before?: Partial<EventSnapshot>; after?: Partial<EventSnapshot> };

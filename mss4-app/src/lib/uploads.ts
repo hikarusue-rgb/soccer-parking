@@ -1,4 +1,5 @@
 // 画像・PDFを Cloud Storage に保存し、表示用のURLを返す（保存先: mss/{学年}/files/{ID}.{拡張子}）
+import { DATA_ROOT } from "./config";
 import { storage } from "./firebase";
 import type { GradeCode } from "./grade";
 import { MAX_FILE_BYTES, compressImage } from "./imageCompress";
@@ -48,7 +49,7 @@ export async function uploadFile(
   if (blob.size >= MAX_FILE_BYTES) throw new Error(`ファイルが大きすぎます（${formatBytes(blob.size)}）。15MB未満にしてください。`);
 
   const id = newFileId();
-  const path = `mss/${grade}/files/${id}.${isPdf ? "pdf" : "jpg"}`;
+  const path = `${DATA_ROOT}/${grade}/files/${id}.${isPdf ? "pdf" : "jpg"}`;
   const s = await storage();
   const task = s.uploadBytesResumable(s.ref(s.instance, path), blob, { contentType, customMetadata: { originalName: file.name.slice(0, 120) } });
   await new Promise<void>((resolve, reject) => {
