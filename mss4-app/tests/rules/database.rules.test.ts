@@ -1,5 +1,6 @@
 // Realtime Database の権限ルールのテスト（Firebase エミュレータで実行: npm run test:rules）
-// 閲覧と車出しエントリーは合言葉なし（誰でも）。編集・抽選はコーチだけ。
+// 合言葉なしで誰でも閲覧・編集・抽選できる（2026-11-02 ユーザー判断）。データの形の検査は残す。
+// 車出しの締切（締切後は辞退だけ等）は、全員がコーチと同じ扱いになったため画面側で守る（コーチの代理修正と同じ）。
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import {
@@ -61,7 +62,6 @@ function fixture() {
 const guest = () => env.unauthenticatedContext().database();
 const coach = () => env.authenticatedContext("coachUid", { email: `g4-coach@${DOMAIN}` }).database();
 const someone = () => env.authenticatedContext("someoneUid", { email: "someone@example.com" }).database();
-const g5coach = () => env.authenticatedContext("g5coachUid", { email: `g5-coach@${DOMAIN}` }).database();
 
 const newEvent = (over: Record<string, unknown> = {}) => ({
   date: "2026-11-15", kind: "match", title: "新しい試合", status: "scheduled",
@@ -102,16 +102,14 @@ describe("閲覧（合言葉なし）", () => {
   });
 });
 
-describe("編集はコーチだけ", () => {
-  it("未ログイン・コーチ以外のログインユーザーは予定・名簿・抽選・大会・設定を書けない", async () => {
-    for (const db of [guest(), someone()]) {
-      await assertFails(db.ref("mss/g4/events/evX").set(newEvent()));
-      await assertFails(db.ref("mss/g4/members/m9").set({ num: 9, name: "追加", active: true }));
-      await assertFails(db.ref("mss/g4/lotteries/evOpen").set({ status: "drawn", updatedAt: TS }));
-      await assertFails(db.ref("mss/g4/tournaments/t1").set({ name: "大会", version: 1, updatedAt: TS }));
-      await assertFails(db.ref("mss/g4/settings").set({ seasonStart: "04-01" }));
-      await assertFails(db.ref("mss/g4/events/evNone").remove());
-    }
+describe("編集は合言葉なしで誰でもできる", () => {
+  it("未ログインでも予定・名簿・抽選・大会・設定を書け、予定を削除できる", async () => {
+    const db = guest();
+    await assertSucceeds(db.ref("mss/g4/events/evX").set(newEvent()));
+    await assertSucceeds(db.ref("mss/g4/members/m9").set({ num: 9, name: "追加", active: true }));
+    await assertSucceeds(db.ref("mss/g4/lotteries/evOpen").set({ status: "drawn", updatedAt: TS }));
+    await assertSucceeds(db.ref("mss/g4/tournaments/t1").set({ name: "大会", version: 1, updatedAt: TS }));
+    await assertSucceeds(db.ref("mss/g4/events/evNone").remove());
   });
   it("誰も mss_acl を書けない（コーチを名乗る登録はできない）", async () => {
     await assertFails(guest().ref("mss_acl/g4/someoneUid").set("coach"));
@@ -143,9 +141,8 @@ describe("編集はコーチだけ", () => {
     await assertSucceeds(coach().ref("mss/g4/members/m3").set({ num: 7, name: "テスト三郎", active: true, order: 3 }));
     await assertFails(coach().ref("mss/g4/members/m4").set({ num: 8, name: "四郎", active: true, phone: "000" }));
   });
-  it("4年生のコーチは5年生のデータを書けず、5年生のコーチは4年生を書けない", async () => {
-    await assertFails(coach().ref("mss/g5/events/ev5").set(newEvent({ version: 2 })));
-    await assertFails(g5coach().ref("mss/g4/events/evNew").set(newEvent()));
+  it("学年コードが不正な場所には書けない", async () => {
+    await assertFails(guest().ref("mss/zz/events/evNew").set(newEvent()));
   });
   it("未定義のノードは作れない", async () => {
     await assertFails(coach().ref("mss/g4/secret").set({ a: 1 }));
@@ -159,8 +156,9 @@ describe("変更履歴", () => {
     await assertFails(db.ref("mss/g4/history/evOpen/h1").set({ at: TS, version: 9, actor: "コーチ", after: { title: "改ざん" } }));
     await assertFails(db.ref("mss/g4/history/evOpen/h1").remove());
   });
-  it("コーチ以外は履歴を書けない", async () => {
-    await assertFails(guest().ref("mss/g4/history/evOpen/h3").set({ at: TS, version: 2, actor: "保護者", after: {} }));
+  it("未ログインでも追記でき、既存の履歴は消せない", async () => {
+    await assertSucceeds(guest().ref("mss/g4/history/evOpen/h3").set({ at: TS, version: 2, actor: "保護者", after: { title: "y" } }));
+    await assertFails(guest().ref("mss/g4/history/evOpen/h1").remove());
   });
 });
 
@@ -181,21 +179,6 @@ describe("車出しエントリー（合言葉なし）", () => {
   it("締切後でも、まだ回答していない人は抽選前なら登録できる（旧アプリと同じ）", async () => {
     await assertSucceeds(guest().ref("mss/g4/entries/evClosed/m2").set(entry()));
   });
-  it("締切後に、回答済みの人が新しく車出し希望に変えることはできない", async () => {
-    const db = guest();
-    await env.withSecurityRulesDisabled(async (ctx) => {
-      await ctx.database().ref("mss/g4/entries/evClosed/m2").set({ attending: true, parkingNeeded: false, carpoolCapacity: 0, at: now - HOUR });
-    });
-    await assertFails(db.ref("mss/g4/entries/evClosed/m2").set(entry()));
-  });
-  it("抽選が終わった試合では、新しい車出し希望は出せない（辞退はできる）", async () => {
-    await env.withSecurityRulesDisabled(async (ctx) => {
-      await ctx.database().ref("mss/g4/lotteries/evOpen").set({ status: "drawn", updatedAt: now, winners: ["m1"] });
-    });
-    const db = guest();
-    await assertFails(db.ref("mss/g4/entries/evOpen/m1").set(entry()));
-    await assertSucceeds(db.ref("mss/g4/entries/evOpen/m1").set(entry({ attending: false, parkingNeeded: false })));
-  });
   it("締切後でも辞退（欠席・車出し不要）はできる", async () => {
     const db = guest();
     await assertSucceeds(db.ref("mss/g4/entries/evClosed/m1").set(entry({ parkingNeeded: false })));
@@ -204,15 +187,8 @@ describe("車出しエントリー（合言葉なし）", () => {
   it("締切後も、すでに出している車出し希望の乗合人数は変えられる", async () => {
     await assertSucceeds(guest().ref("mss/g4/entries/evClosed/m1").set(entry({ carpoolCapacity: 3 })));
   });
-  it("抽選なしの予定・名簿にない子にはエントリーできない", async () => {
-    const db = guest();
-    await assertFails(db.ref("mss/g4/entries/evNone/m1").set(entry()));
-    await assertFails(db.ref("mss/g4/entries/evOpen/ghost").set(entry()));
-  });
-  it("コーチ以外はエントリーを削除できない。コーチは予定ごとにまとめて削除できる", async () => {
-    await assertFails(guest().ref("mss/g4/entries/evClosed/m1").remove());
-    await assertFails(guest().ref("mss/g4/entries/evClosed").remove());
-    await assertSucceeds(coach().ref("mss/g4/entries/evClosed").remove());
+  it("予定ごとのエントリーをまとめて削除できる（抽選のやり直しなど）", async () => {
+    await assertSucceeds(guest().ref("mss/g4/entries/evClosed").remove());
   });
   it("コーチは締切後でも代理で修正できる", async () => {
     await assertSucceeds(coach().ref("mss/g4/entries/evClosed/m2").set(entry()));
@@ -225,8 +201,8 @@ describe("抽選結果", () => {
       status: "drawn", policy: "random", slots: 2, participants: ["m1"], winners: ["m1"], conductedAt: TS, updatedAt: TS,
     }));
   });
-  it("コーチ以外は抽選結果を保存できない", async () => {
-    await assertFails(guest().ref("mss/g4/lotteries/evClosed").set({ status: "drawn", updatedAt: TS }));
+  it("未ログインでも抽選結果を保存できる", async () => {
+    await assertSucceeds(guest().ref("mss/g4/lotteries/evClosed").set({ status: "drawn", updatedAt: TS }));
   });
 });
 
@@ -240,9 +216,6 @@ describe("テスト環境（/mss_test）", () => {
   it("データの形の検査は本番と同じ", async () => {
     await assertFails(guest().ref("mss_test/g4/events/evBad").set(newEvent({ date: "2026-13-01" })));
     await assertFails(guest().ref("mss_test/g4/secret").set({ a: 1 }));
-  });
-  it("テスト環境の操作で本番（/mss）は書き換えられない", async () => {
-    await assertFails(guest().ref("mss/g4/events/evT").set(newEvent()));
   });
 });
 

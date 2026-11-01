@@ -7,6 +7,8 @@ export const TARGET: "emulator" | "production" =
 /** test: 合言葉なしでコーチの操作も試せるテスト環境（本番とは別のデータ /mss_test を使う） */
 export const APP_MODE: "normal" | "test" = import.meta.env.VITE_APP_MODE === "test" ? "test" : "normal";
 export const TEST_MODE = APP_MODE === "test";
+/** 合言葉なしで誰でも予定・駐車場・要項を編集できる（2026-11-02 ユーザー判断「コーチの合言葉もなしでOK」）。ルール側も同じ */
+export const EVERYONE_EDITS = true;
 /** データの置き場所（本番: mss、テスト環境: mss_test） */
 export const DATA_ROOT = TEST_MODE ? "mss_test" : "mss";
 

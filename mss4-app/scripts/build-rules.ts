@@ -1,6 +1,7 @@
 // Realtime Database のルール（database.rules.json）を作る。
 //   node scripts/build-rules.ts
-// 本番 /mss は「閲覧と車出しの回答は誰でも・編集はコーチだけ」、テスト環境 /mss_test は「誰でも編集できる」。
+// 本番 /mss・テスト環境 /mss_test とも「合言葉なしで誰でも閲覧・編集できる」（2026-11-02 ユーザー判断：コーチの合言葉も不要）。
+// 車出しの回答の締切ルールと、データの形の検査は残す。
 // どちらも同じデータの形の検査を使う（テストで作ったデータが本番と同じ形になるように）。
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -107,9 +108,10 @@ const coach = "auth != null && root.child('mss_acl').child($grade).child(auth.ui
 const rules = {
   rules: {
     mss_acl: { ".read": false, ".write": false },
-    mss: { $grade: gradeRules("mss", coach) },
+    // 学年コードが正しい場所なら誰でも書ける。車出しの締切（締切後は辞退だけ等）は画面側で守る（全員がコーチと同じ扱いのため）
+    mss: { $grade: gradeRules("mss", "$grade.matches(/^(k|g[1-6])$/)") },
     // テスト環境：合言葉なしで誰でもコーチの操作を試せる（本番とは別のデータ）
-    mss_test: { $grade: gradeRules("mss_test", "true") },
+    mss_test: { $grade: gradeRules("mss_test", "$grade.matches(/^(k|g[1-6])$/)") },
     // 旧アプリ（/pro ほか）は従来どおり
     $legacy: { ".read": true, ".write": true },
   },

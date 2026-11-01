@@ -8,17 +8,17 @@
       "$grade": {
         ".read": "$grade.matches(/^(k|g[1-6])$/)",
         "meta": {
-          ".write": "auth != null && root.child('mss_acl').child($grade).child(auth.uid).val() === 'coach'"
+          ".write": "$grade.matches(/^(k|g[1-6])$/)"
         },
         "settings": {
-          ".write": "auth != null && root.child('mss_acl').child($grade).child(auth.uid).val() === 'coach'"
+          ".write": "$grade.matches(/^(k|g[1-6])$/)"
         },
         "events": {
           ".indexOn": [
             "date"
           ],
           "$eventId": {
-            ".write": "auth != null && root.child('mss_acl').child($grade).child(auth.uid).val() === 'coach'",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             ".validate": "$eventId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['date', 'kind', 'title', 'status', 'version', 'updatedAt']) && (data.exists() ? newData.child('version').val() === data.child('version').val() + 1 : newData.child('version').val() === 1)",
             "date": {
               ".validate": "newData.isString() && newData.val().matches(/^20[0-9][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/)"
@@ -69,20 +69,20 @@
         "history": {
           "$eventId": {
             "$historyId": {
-              ".write": "auth != null && root.child('mss_acl').child($grade).child(auth.uid).val() === 'coach' && !data.exists() && newData.exists()",
+              ".write": "$grade.matches(/^(k|g[1-6])$/) && !data.exists() && newData.exists()",
               ".validate": "newData.hasChildren(['at', 'version', 'after']) && newData.child('at').val() === now"
             }
           }
         },
         "tournaments": {
           "$tournamentId": {
-            ".write": "auth != null && root.child('mss_acl').child($grade).child(auth.uid).val() === 'coach'",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             ".validate": "$tournamentId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['name', 'version', 'updatedAt']) && (data.exists() ? newData.child('version').val() === data.child('version').val() + 1 : newData.child('version').val() === 1)"
           }
         },
         "members": {
           "$memberId": {
-            ".write": "auth != null && root.child('mss_acl').child($grade).child(auth.uid).val() === 'coach'",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             ".validate": "$memberId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['num', 'name', 'active'])",
             "num": {
               ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
@@ -103,7 +103,7 @@
         },
         "entries": {
           "$eventId": {
-            ".write": "auth != null && root.child('mss_acl').child($grade).child(auth.uid).val() === 'coach'",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             "$memberId": {
               ".write": "newData.exists() && root.child('mss').child($grade).child('members').child($memberId).exists() && root.child('mss').child($grade).child('events').child($eventId).child('parking/mode').val() === 'lottery' && (newData.child('parkingNeeded').val() === false || data.child('parkingNeeded').val() === true || (!root.child('mss').child($grade).child('lotteries').child($eventId).exists() && (!data.exists() || !root.child('mss').child($grade).child('events').child($eventId).child('parking/deadlineAt').exists() || now < root.child('mss').child($grade).child('events').child($eventId).child('parking/deadlineAt').val())))",
               ".validate": "newData.hasChildren(['attending', 'parkingNeeded', 'carpoolCapacity', 'at']) && (newData.child('attending').val() === true || newData.child('parkingNeeded').val() === false)",
@@ -127,7 +127,7 @@
         },
         "lotteries": {
           "$eventId": {
-            ".write": "auth != null && root.child('mss_acl').child($grade).child(auth.uid).val() === 'coach'",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             ".validate": "newData.hasChildren(['status', 'updatedAt'])",
             "status": {
               ".validate": "newData.isString() && newData.val().matches(/^(drawn)$/)"
@@ -146,17 +146,17 @@
       "$grade": {
         ".read": "$grade.matches(/^(k|g[1-6])$/)",
         "meta": {
-          ".write": "true"
+          ".write": "$grade.matches(/^(k|g[1-6])$/)"
         },
         "settings": {
-          ".write": "true"
+          ".write": "$grade.matches(/^(k|g[1-6])$/)"
         },
         "events": {
           ".indexOn": [
             "date"
           ],
           "$eventId": {
-            ".write": "true",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             ".validate": "$eventId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['date', 'kind', 'title', 'status', 'version', 'updatedAt']) && (data.exists() ? newData.child('version').val() === data.child('version').val() + 1 : newData.child('version').val() === 1)",
             "date": {
               ".validate": "newData.isString() && newData.val().matches(/^20[0-9][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/)"
@@ -207,20 +207,20 @@
         "history": {
           "$eventId": {
             "$historyId": {
-              ".write": "true && !data.exists() && newData.exists()",
+              ".write": "$grade.matches(/^(k|g[1-6])$/) && !data.exists() && newData.exists()",
               ".validate": "newData.hasChildren(['at', 'version', 'after']) && newData.child('at').val() === now"
             }
           }
         },
         "tournaments": {
           "$tournamentId": {
-            ".write": "true",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             ".validate": "$tournamentId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['name', 'version', 'updatedAt']) && (data.exists() ? newData.child('version').val() === data.child('version').val() + 1 : newData.child('version').val() === 1)"
           }
         },
         "members": {
           "$memberId": {
-            ".write": "true",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             ".validate": "$memberId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['num', 'name', 'active'])",
             "num": {
               ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
@@ -241,7 +241,7 @@
         },
         "entries": {
           "$eventId": {
-            ".write": "true",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             "$memberId": {
               ".write": "newData.exists() && root.child('mss_test').child($grade).child('members').child($memberId).exists() && root.child('mss_test').child($grade).child('events').child($eventId).child('parking/mode').val() === 'lottery' && (newData.child('parkingNeeded').val() === false || data.child('parkingNeeded').val() === true || (!root.child('mss_test').child($grade).child('lotteries').child($eventId).exists() && (!data.exists() || !root.child('mss_test').child($grade).child('events').child($eventId).child('parking/deadlineAt').exists() || now < root.child('mss_test').child($grade).child('events').child($eventId).child('parking/deadlineAt').val())))",
               ".validate": "newData.hasChildren(['attending', 'parkingNeeded', 'carpoolCapacity', 'at']) && (newData.child('attending').val() === true || newData.child('parkingNeeded').val() === false)",
@@ -265,7 +265,7 @@
         },
         "lotteries": {
           "$eventId": {
-            ".write": "true",
+            ".write": "$grade.matches(/^(k|g[1-6])$/)",
             ".validate": "newData.hasChildren(['status', 'updatedAt'])",
             "status": {
               ".validate": "newData.isString() && newData.val().matches(/^(drawn)$/)"
