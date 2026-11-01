@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.log
+.env.local
+.env.*.local
+# 移行データ（子どもの名前を含む）はアプリの外の ../work/ に出力し、ここには置かない

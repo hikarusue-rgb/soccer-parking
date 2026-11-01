@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// 閲覧は合言葉なし。画像・PDFはトークン付きのダウンロードURLで表示するため、ルール上の読み取り・追加・削除はコーチだけ。
+// コーチは学年ごとのアカウント（合言葉＝パスワード）のメールアドレスで判定する
+// （Storage のルールからは Realtime Database を参照できないため）。
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isCoach(grade) {
+      return request.auth != null && request.auth.token.email == grade + '-coach@soccer-parking.firebaseapp.com';
+    }
+
+    match /mss/{grade}/files/{fileName} {
+      allow read: if isCoach(grade);
+      // resource == null: 既存ファイルの上書きはさせない（ファイル名は毎回新しいIDにする）
+      allow create: if isCoach(grade)
+        && resource == null
+        && request.resource.size < 15 * 1024 * 1024
+        && (request.resource.contentType.matches('image/(jpeg|png|webp|gif)')
+          || request.resource.contentType == 'application/pdf');
+      allow delete: if isCoach(grade);
+    }
+  }
+}

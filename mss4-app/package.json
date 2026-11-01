@@ -1,0 +1,36 @@
+{
+  "name": "mss4-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MSS・香澄 4年生アプリ（予定・駐車場抽選・大会要項）",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "test": "vitest run tests/unit",
+    "test:rules": "node scripts/with-java.mjs firebase emulators:exec --only database,storage --project demo-mss4 \"npx vitest run tests/rules\"",
+    "emulators": "node scripts/with-java.mjs firebase emulators:start --only auth,database,storage --project demo-mss4",
+    "seed": "node scripts/seed-emulator.ts",
+    "migrate:dry": "node scripts/migrate.ts"
+  },
+  "dependencies": {
+    "firebase": "13.1.0",
+    "lucide-react": "1.66.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
