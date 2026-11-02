@@ -2,13 +2,14 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { dayLabel, monthShape } from "../lib/datetime";
 import type { ParkingSummary } from "../lib/parking";
 import { KIND_LABELS, STATUS_LABELS, type TeamEvent } from "../lib/types";
+import type { UpdateState } from "../lib/seen";
 
 interface Props {
   month: string;
   today: string;
   events: TeamEvent[];
   selected: string | null;
-  isUnread: (e: TeamEvent) => boolean;
+  updateState: (e: TeamEvent) => UpdateState;
   parkingOf: (e: TeamEvent) => ParkingSummary | null;
   onSelect: (date: string) => void;
   onMonth: (delta: number | "today") => void;
@@ -17,7 +18,7 @@ interface Props {
 const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
 
 /** 月表示：各日のマスに予定名・駐車場の状態を表示する */
-export function MonthCalendar({ month, today, events, selected, isUnread, parkingOf, onSelect, onMonth }: Props) {
+export function MonthCalendar({ month, today, events, selected, updateState, parkingOf, onSelect, onMonth }: Props) {
   const { offset, days } = monthShape(month);
   const [y, m] = month.split("-").map(Number);
   const byDate = new Map<string, TeamEvent[]>();
@@ -40,7 +41,7 @@ export function MonthCalendar({ month, today, events, selected, isUnread, parkin
           const weekday = (offset + i) % 7;
           const summary = plans.map((e) => {
             const p = parkingOf(e);
-            return `${e.title}（${STATUS_LABELS[e.status]}${p ? `、${p.label.replace("🚗 ", "駐車場 ")}` : ""}${isUnread(e) ? "、更新あり" : ""}）`;
+            return `${e.title}（${STATUS_LABELS[e.status]}${p ? `、${p.label.replace("🚗 ", "駐車場 ")}` : ""}${updateState(e) === "unread" ? "、未確認の更新" : updateState(e) === "recent" ? "、最近変更" : ""}）`;
           }).join("、");
           return (
             <button
@@ -56,9 +57,10 @@ export function MonthCalendar({ month, today, events, selected, isUnread, parkin
                 {plans.slice(0, 3).map((e) => {
                   const p = parkingOf(e);
                   return (
-                    <span key={e.id} className={`day-event kind-${e.kind} ${e.status === "canceled" ? "is-canceled" : ""} ${isUnread(e) ? "is-updated" : ""}`}>
+                    <span key={e.id} className={`day-event kind-${e.kind} ${e.status === "canceled" ? "is-canceled" : ""} ${updateState(e) === "unread" ? "is-updated" : updateState(e) === "recent" ? "is-recent" : ""}`}>
                       <b>{e.kind === "notice" ? "連絡" : KIND_LABELS[e.kind]}</b>
-                      {isUnread(e) && <em className="day-update">🔔更新</em>}
+                      {updateState(e) === "unread" && <em className="day-update">🔔未確認</em>}
+                      {updateState(e) === "recent" && <em className="day-update is-recent">✏️変更</em>}
                       <span className="day-event-title">{e.title}</span>
                       {p && <span className={`day-parking parking-${p.phase}`}>{p.short}</span>}
                     </span>

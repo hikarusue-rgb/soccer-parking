@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { GradeCode, Role } from "./grade";
 import type { Route } from "./route";
-import { isLotteryUnread, isUnread as unreadOf, type Seen } from "./seen";
+import { isLotteryRecent, isLotteryUnread, isRecent, isUnread as unreadOf, type Seen, type UpdateState } from "./seen";
 import { hasDocs } from "./matches";
 import { parkingSummary, type ParkingSummary } from "./parking";
 import type { TeamData, TeamEvent } from "./types";
@@ -22,6 +22,8 @@ export interface TeamContextValue {
   isUnread: (e: TeamEvent) => boolean;
   /** まだ見ていない抽選結果がある予定 */
   isLotteryUnread: (e: TeamEvent) => boolean;
+  /** 目印の種類（未確認＝オレンジ、最近の変更＝全員共通） */
+  updateState: (e: TeamEvent) => UpdateState;
   parkingOf: (e: TeamEvent) => ParkingSummary | null;
   hasDocs: (e: TeamEvent) => boolean;
   /** LINE などで共有する予定の固定URL */
@@ -71,6 +73,9 @@ export function TeamProvider({ grade, role, data, navigate, seen: seenState, chi
       grade, role, coach, data, now, navigate, seen, markSeen, seenStorable: storable,
       isUnread: (e) => unreadOf(e, seen, now),
       isLotteryUnread: (e) => isLotteryUnread(e.id, data.lotteries[e.id], seen, now),
+      updateState: (e) =>
+        unreadOf(e, seen, now) || isLotteryUnread(e.id, data.lotteries[e.id], seen, now) ? "unread"
+          : isRecent(e, now) || isLotteryRecent(data.lotteries[e.id], now) ? "recent" : null,
       parkingOf: (e) => parkingSummary(e, data.entries[e.id], data.lotteries[e.id], now),
       hasDocs,
       eventUrl: (e) => `${base}#event/${e.id}`,

@@ -740,3 +740,40 @@ body { background: var(--bg); }
 @media (prefers-reduced-motion: reduce) {
   .updates-bell, .updates-bell svg, .whats-new-head svg, .tab[href="#home"] .tab-count { animation: none; }
 }
+
+/* ═══ 最近の変更（全員共通）＋未確認（個人・オレンジ） 2026-11-02 ═══ */
+:root { --recent: #3b5bdb; --recent-bg: #eef2ff; }
+.updates-panel { box-shadow: var(--shadow), inset 0 0 0 2px #c5d0ff; }
+.updates-panel.has-unread { box-shadow: var(--shadow), inset 0 0 0 2px var(--alert); }
+.updates-panel:not(.has-unread) .updates-head h2 { color: var(--recent); }
+.updates-panel:not(.has-unread) .updates-head h2 b { color: var(--recent); }
+.updates-panel:not(.has-unread) .updates-bell { background: var(--recent); animation: none; }
+.updates-panel:not(.has-unread) .updates-bell svg { animation: none; }
+.updates-head h2 { flex-wrap: wrap; }
+.unread-pill { font-size: 12px; font-weight: 900; color: #fff; background: var(--alert); border-radius: 999px; padding: 2px 10px; margin-left: 4px; }
+.updates-note { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: -4px; }
+.dot-unread { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--alert); margin: 0 3px 0 4px; vertical-align: 0; }
+.update-card.is-seen { background: #fff; box-shadow: inset 0 0 0 1px #dfe5f3; }
+.update-card.is-seen:hover { background: #f7f9ff; }
+.update-card.is-seen .update-when { background: var(--recent-bg); }
+.update-card.is-seen .update-when small { color: var(--recent); }
+.update-card.is-unread { box-shadow: inset 4px 0 0 var(--alert); }
+.update-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tag-unread { font-size: 11px; font-weight: 900; color: #fff; background: var(--alert); border-radius: 6px; padding: 0 7px; }
+.tag-seen { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 800; color: var(--muted); background: #f1f4f8; border-radius: 6px; padding: 0 7px; }
+
+.badge-recent { background: var(--recent-bg); color: var(--recent); box-shadow: inset 0 0 0 1px #c5d0ff; }
+.new-flag.is-recent { background: var(--recent-bg); color: var(--recent); }
+.upcoming-card.is-recent { box-shadow: var(--shadow), inset 0 0 0 2px #c5d0ff; }
+.upcoming-card.is-first.is-recent { box-shadow: inset 0 0 0 3px #8da2fb; }
+.event-row.is-recent { box-shadow: var(--shadow), inset 4px 0 0 var(--recent); }
+.match-card.is-recent { box-shadow: var(--shadow), inset 0 0 0 2px #c5d0ff; }
+.doc-card.is-recent { box-shadow: var(--shadow), inset 0 0 0 2px #c5d0ff; }
+.day-event.is-recent { box-shadow: inset 0 0 0 1.5px #8da2fb; }
+.day-update.is-recent { background: var(--recent); }
+
+.whats-new.is-recent { box-shadow: var(--shadow), inset 0 0 0 2px #c5d0ff; }
+.whats-new.is-recent .whats-new-head { color: var(--recent); }
+.whats-new.is-recent .whats-new-list li { background: var(--recent-bg); }
+.whats-new.is-recent .whats-new-list li > b { color: var(--recent); }
+.whats-new.is-recent .wn-after::before { color: var(--recent); }

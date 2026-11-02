@@ -67,7 +67,7 @@ export function EventDetailView({ id, section = "info", from, onBack }: { id: st
 
       <header className={`detail-hero hero-${event.kind}`}>
         <p className="detail-date">{dayLabel(event.date)}<small>{relativeDay(event.date, today)}</small></p>
-        <EventBadges event={event} unread={t.isUnread(event)} />
+        <EventBadges event={event} />
         <h1 className={`detail-title ${event.status === "canceled" ? "is-canceled" : ""}`}>{event.title}</h1>
         <p className="hero-meta"><Clock size={15} aria-hidden="true" />{timeSummary(event)}</p>
         <p className="hero-meta"><MapPin size={15} aria-hidden="true" />{event.venue || "場所未定"}</p>

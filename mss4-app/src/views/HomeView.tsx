@@ -69,9 +69,9 @@ export function HomeView() {
               const canPark = e.kind !== "notice";
               return (
                 <div key={e.id} className={`upcoming-wrap ${i === 0 ? "is-first" : ""}`}>
-                  <button className={`upcoming-card upcoming-${e.kind} ${i === 0 ? "is-first" : ""} ${e.status === "canceled" ? "is-canceled" : ""} ${t.isUnread(e) || t.isLotteryUnread(e) ? "is-updated" : ""}`} onClick={() => open(e)}>
+                  <button className={`upcoming-card upcoming-${e.kind} ${i === 0 ? "is-first" : ""} ${e.status === "canceled" ? "is-canceled" : ""} ${t.updateState(e) === "unread" ? "is-updated" : t.updateState(e) === "recent" ? "is-recent" : ""}`} onClick={() => open(e)}>
                     <span className="upcoming-date"><b>{dayLabel(e.date)}</b><small>{relativeDay(e.date, today)}</small></span>
-                    <EventBadges event={e} unread={t.isUnread(e) || t.isLotteryUnread(e)} />
+                    <EventBadges event={e} />
                     <span className="upcoming-title">{e.title}</span>
                     <span className="event-meta"><Clock size={15} aria-hidden="true" />{timeSummary(e)}</span>
                     <span className="event-meta"><MapPin size={15} aria-hidden="true" />{e.venue || "場所未定"}</span>
@@ -113,7 +113,7 @@ export function HomeView() {
             today={today}
             events={events}
             selected={day}
-            isUnread={(e) => t.isUnread(e) || t.isLotteryUnread(e)}
+            updateState={t.updateState}
             parkingOf={t.parkingOf}
             onSelect={setDay}
             onMonth={changeMonth}
@@ -138,7 +138,7 @@ export function HomeView() {
               <ul className="event-list">
                 {listed.map((e) => (
                   <li key={e.id}>
-                    <EventRow event={e} today={today} unread={t.isUnread(e) || t.isLotteryUnread(e)} parking={t.parkingOf(e)} hasDocs={t.hasDocs(e)} showDate={!day} onOpen={() => open(e)} />
+                    <EventRow event={e} today={today} parking={t.parkingOf(e)} hasDocs={t.hasDocs(e)} showDate={!day} onOpen={() => open(e)} />
                   </li>
                 ))}
               </ul>

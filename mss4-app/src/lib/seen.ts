@@ -42,6 +42,23 @@ export function baseline(data: Pick<TeamData, "events" | "lotteries">): Seen {
   return seen;
 }
 
+/** 全員に共通で「最近の変更」として見せる日数 */
+export const SHARED_DAYS = 3;
+const SHARED = SHARED_DAYS * 86_400_000;
+
+/** 全員共通：直近3日以内に追加・変更された予定（移行しただけの予定は除く） */
+export function isRecent(e: TeamEvent, now: number = Date.now()): boolean {
+  return e.updatedAt >= now - SHARED && !(e.updatedBy === "移行" && e.version <= 1);
+}
+
+/** 全員共通：直近3日以内に出た抽選結果 */
+export function isLotteryRecent(lottery: Lottery | undefined, now: number = Date.now()): boolean {
+  return Boolean(lottery) && lottery!.updatedAt >= now - SHARED;
+}
+
+/** 更新の目印：unread＝この端末でまだ見ていない（オレンジ）、recent＝全員共通の最近の変更（見た後も3日間） */
+export type UpdateState = "unread" | "recent" | null;
+
 export function isUnread(e: TeamEvent, seen: Seen, now: number = Date.now()): boolean {
   return e.updatedAt >= now - RECENT && (seen[e.id] ?? 0) < e.version;
 }

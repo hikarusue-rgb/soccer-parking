@@ -3,8 +3,9 @@ import { ChevronRight } from "lucide-react";
 import { addDays, dayLabel, jstToday, relativeDay } from "../lib/datetime";
 import { hasDocs } from "../lib/matches";
 import { useTeam } from "../lib/teamContext";
-import { KIND_LABELS, type TeamEvent } from "../lib/types";
+import type { TeamEvent } from "../lib/types";
 import { QuickRow } from "../components/QuickRow";
+import { EventBadges } from "../components/EventBadges";
 
 /** 📄 要項：要項が届いている予定の一覧。タップでその予定の「要項」へ。コーチは予定を選んでそのまま資料を追加 */
 export function DocsView() {
@@ -31,10 +32,10 @@ export function DocsView() {
     const pdfs = e.attachments.length - images.length;
     const parts = [images.length > 0 && `🖼 画像${images.length}`, pdfs > 0 && `📑 PDF${pdfs}`, Boolean(d.referee || d.venueNotes) && "📝 注意事項"].filter(Boolean);
     return (
-      <button key={e.id} className={`doc-card ${t.isUnread(e) ? "is-updated" : ""}`} onClick={() => open(e)}>
+      <button key={e.id} className={`doc-card ${t.updateState(e) === "unread" ? "is-updated" : t.updateState(e) === "recent" ? "is-recent" : ""}`} onClick={() => open(e)}>
         <span className="doc-card-head">
           <span className="quick-date"><b>{dayLabel(e.date)}</b><small>{relativeDay(e.date, today)}</small></span>
-          <span className="badges">{t.isUnread(e) && <span className="badge badge-update">🔔 更新</span>}<span className={`badge kind-${e.kind}`}>{KIND_LABELS[e.kind]}</span></span>
+          <EventBadges event={e} />
         </span>
         <b className="doc-title">{e.title}</b>
         {d.format && <span className="doc-line"><span>試合形式</span>{d.format}</span>}

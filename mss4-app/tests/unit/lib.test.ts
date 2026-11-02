@@ -151,3 +151,17 @@ describe("新しい更新（前回見た版からの変更）", () => {
     expect(baseline({ events: [e], lotteries: { e1: l } })).toEqual({ e1: 3, "L:e1": now - 1000 });
   });
 });
+
+describe("最近の変更（全員共通）", () => {
+  it("直近3日間の追加・変更は全員に出す。移行しただけの予定と古い変更は出さない", async () => {
+    const { isRecent, isLotteryRecent } = await import("../../src/lib/seen.ts");
+    const now = Date.parse("2026-11-02T00:00:00Z");
+    const day = 86_400_000;
+    expect(isRecent({ updatedAt: now - day, updatedBy: "コーチ", version: 2 } as never, now)).toBe(true);
+    expect(isRecent({ updatedAt: now - day, updatedBy: "コーチ", version: 1 } as never, now)).toBe(true);
+    expect(isRecent({ updatedAt: now - day, updatedBy: "移行", version: 1 } as never, now)).toBe(false);
+    expect(isRecent({ updatedAt: now - 4 * day, updatedBy: "コーチ", version: 3 } as never, now)).toBe(false);
+    expect(isLotteryRecent({ updatedAt: now - 2 * day } as never, now)).toBe(true);
+    expect(isLotteryRecent({ updatedAt: now - 5 * day } as never, now)).toBe(false);
+  });
+});
