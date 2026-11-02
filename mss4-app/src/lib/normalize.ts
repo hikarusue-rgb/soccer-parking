@@ -57,6 +57,7 @@ export function toEvent(id: string, value: unknown): TeamEvent {
   const uniform = obj(e.uniform);
   const details = obj(e.details);
   const legacy = obj(e.legacy);
+  const hp = obj(e.hp);
   return {
     id,
     date: str(e.date),
@@ -93,6 +94,8 @@ export function toEvent(id: string, value: unknown): TeamEvent {
         ...(str(legacy.parkingEventId) ? { parkingEventId: str(legacy.parkingEventId) } : {}),
       }
       : null,
+    // クラブHPとのひも付けは、そのまま保持する（アプリで保存しても消さない）
+    hp: str(hp.key) ? (Object.fromEntries(Object.entries(hp).filter(([, v]) => typeof v === "string" || typeof v === "boolean")) as unknown as TeamEvent["hp"]) : null,
   };
 }
 

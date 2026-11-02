@@ -47,6 +47,10 @@ export function summarize(items: HistoryItem[], since: number): UpdateSummary {
             ? { text: "🚗 駐車場の抽選はなくなりました", tone: "amber" }
             : { text: "🚗 駐車場の条件が変わりました", tone: "amber" },
       );
+    } else if (c.label === "クラブHPの補足") {
+      phrases.push(/消えて/.test(c.after)
+        ? { text: "⚠️ クラブHPの予定表から消えました", tone: "red" }
+        : { text: c.after === "なし" ? "🏫 HPの補足がなくなりました" : `🏫 HP：${c.after.slice(0, 20)}`, tone: "amber" });
     } else if (["当日資料", "試合形式", "審判割当", "会場・駐車の注意事項"].includes(c.label)) {
       if (docs) continue;
       docs = true;

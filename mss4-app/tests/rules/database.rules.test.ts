@@ -128,6 +128,23 @@ describe("編集は合言葉なしで誰でもできる", () => {
     await assertFails(db.ref("mss/g4/events/evOpen").set(newEvent({ title: "古い版から", version: 2 })));
     await assertFails(db.ref("mss/g4/events/evOpen/title").set("部分だけ変更"));
   });
+  it("クラブHPとのひも付け（hp）だけは版を上げずに書ける。版を上げずに予定名などを変える保存はアプリの古い版からはできない", async () => {
+    const db = guest();
+    await assertSucceeds(db.ref("mss/g4/events/evOpen/hp").set({ key: "2026-11-08", title: "受付中の試合" }));
+    // 古い版（version 1）を元にした保存：版は2に上がるが、すでに2になっていれば失敗（同時編集の検出）
+    await assertSucceeds(db.ref("mss/g4/events/evOpen").set(newEvent({ title: "先に保存", version: 2 })));
+    await assertFails(db.ref("mss/g4/events/evOpen").set(newEvent({ title: "あとから保存", version: 2 })));
+  });
+  it("HPの自動反映と同じ形（版を上げ、更新時刻はサーバー時刻、履歴を1件）で書ける", async () => {
+    await assertSucceeds(guest().ref().update({
+      "mss/g4/events/evOpen/title": "トレーニング",
+      "mss/g4/events/evOpen/version": 2,
+      "mss/g4/events/evOpen/updatedAt": TS,
+      "mss/g4/events/evOpen/updatedBy": "HP自動更新",
+      "mss/g4/events/evOpen/hp": { key: "2026-11-08", title: "トレーニング" },
+      "mss/g4/history/evOpen/hpX": { at: TS, version: 2, actor: "HP自動更新", before: { title: "受付中の試合" }, after: { title: "トレーニング" } },
+    }));
+  });
   it("不正な日付・種別・時刻・大会ID・予定IDは失敗", async () => {
     const db = coach();
     await assertFails(db.ref("mss/g4/events/evBad").set(newEvent({ date: "2026-13-01" })));

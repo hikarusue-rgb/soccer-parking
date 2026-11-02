@@ -191,6 +191,8 @@ function Yokou({ event: e }: { event: TeamEvent }) {
           {e.note && <p className="preline">{e.note}</p>}
         </div>
       )}
+      {e.hp?.removed && <div className="hp-removed" role="alert">⚠️ この予定はクラブHPの予定表から消えています。中止・変更の可能性があるので、コーチに確認してください。</div>}
+      {e.hp?.note && !e.hp.removed && <div className="yk-item hp-note"><small>🏫 クラブHPの補足</small><b>{e.hp.note}</b></div>}
       {e.equipmentConfirmed && <div className="yk-item"><small>🎒 持ち物</small><b>{e.equipment.join("・") || "指定なし"}</b></div>}
       <div className="yk-item">
         <small>📅 カレンダーに追加</small>

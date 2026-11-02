@@ -57,7 +57,7 @@ export function ChangeHistory({ event, showLog = true }: { event: TeamEvent; sho
           <p className="whats-new-head">
             {unread ? <BellRing size={17} aria-hidden="true" /> : <span aria-hidden="true">✏️</span>}
             {unread ? "前回から変わったところ" : `最近の変更（直近${SHARED_DAYS}日間）`}
-            <small>{dateTimeLabel(event.updatedAt)}</small>
+            <small>{dateTimeLabel(event.updatedAt)}{event.updatedBy === "HP自動更新" && "・クラブHPから"}</small>
           </p>
           {!sum && !error && <p className="muted">読み込み中…</p>}
           {sum?.added && <p className="whats-new-added">🆕 新しく追加された予定です</p>}

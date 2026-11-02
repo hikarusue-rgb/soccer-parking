@@ -91,7 +91,7 @@ export function UpdatesPanel() {
                       : <span className="phrase tone-plain">{!sum ? "読み込み中…" : h && h.length ? "↩ 変更後、元に戻りました" : "内容が変わりました"}</span>}
                     {phrases.length > 4 && <span className="phrase tone-plain">ほか{phrases.length - 4}件</span>}
                   </span>
-                  <small className="update-ago">更新：{ago(at, t.now)}</small>
+                  <small className="update-ago">更新：{ago(at, t.now)}{e.updatedBy === "HP自動更新" && "（クラブHPから自動反映）"}</small>
                 </span>
                 <ChevronRight size={18} aria-hidden="true" />
               </button>

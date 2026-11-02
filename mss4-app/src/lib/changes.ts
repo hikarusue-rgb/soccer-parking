@@ -29,6 +29,8 @@ export interface EventSnapshot {
   venueNotes: string;
   parking: string;
   files: string;
+  /** クラブHPの補足（GAS の自動反映が入れる） */
+  hpNote?: string;
 }
 
 export interface Difference { label: string; before: string; after: string }
@@ -52,8 +54,11 @@ export function snapshotOfEvent(e: TeamEvent): EventSnapshot {
     format: e.details.format, referee: e.details.referee, venueNotes: e.details.venueNotes,
     parking: parkingText(e.parking.mode, e.parking.limit, e.parking.deadlineAt, e.parking.confirmed.length),
     files: e.attachments.map((a) => a.label).join("、"),
+    hpNote: hpNoteOf(e.hp),
   };
 }
+
+const hpNoteOf = (hp: TeamEvent["hp"]) => (hp?.removed ? "クラブHPの予定表から消えています" : hp?.note ?? "");
 
 export function snapshotOfDraft(d: EventDraft): EventSnapshot {
   return {
@@ -65,6 +70,7 @@ export function snapshotOfDraft(d: EventDraft): EventSnapshot {
     format: d.details.format.trim(), referee: d.details.referee.trim(), venueNotes: d.details.venueNotes.trim(),
     parking: parkingText(d.parkingMode, d.parkingLimit, d.deadline ? localInputToMs(d.deadline) : null, d.confirmed.length),
     files: d.attachments.map((a) => a.label).join("、"),
+    hpNote: hpNoteOf(d.hp),
   };
 }
 
@@ -88,6 +94,7 @@ const FIELDS: [keyof EventSnapshot, string, (v: string) => string][] = [
   ["venueNotes", "会場・駐車の注意事項", (v) => v || "なし"],
   ["parking", "駐車場", (v) => v || "抽選なし"],
   ["files", "当日資料", (v) => v || "なし"],
+  ["hpNote", "クラブHPの補足", (v) => v || "なし"],
 ];
 
 export function differences(before: Partial<EventSnapshot>, after: Partial<EventSnapshot>): Difference[] {

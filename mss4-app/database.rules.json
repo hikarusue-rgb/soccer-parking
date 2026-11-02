@@ -19,7 +19,7 @@
           ],
           "$eventId": {
             ".write": "$grade.matches(/^(k|g[1-6])$/)",
-            ".validate": "$eventId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['date', 'kind', 'title', 'status', 'version', 'updatedAt']) && (data.exists() ? newData.child('version').val() === data.child('version').val() + 1 : newData.child('version').val() === 1)",
+            ".validate": "$eventId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['date', 'kind', 'title', 'status', 'version', 'updatedAt']) && (data.exists() ? (newData.child('version').val() === data.child('version').val() + 1 || (newData.child('version').val() === data.child('version').val() && newData.child('updatedAt').val() === data.child('updatedAt').val() && newData.child('date').val() === data.child('date').val() && newData.child('kind').val() === data.child('kind').val() && newData.child('title').val() === data.child('title').val() && newData.child('status').val() === data.child('status').val() && newData.child('start').val() === data.child('start').val() && newData.child('end').val() === data.child('end').val() && newData.child('venue').val() === data.child('venue').val() && newData.child('note').val() === data.child('note').val())) : newData.child('version').val() === 1)",
             "date": {
               ".validate": "newData.isString() && newData.val().matches(/^20[0-9][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/)"
             },
@@ -77,7 +77,7 @@
         "tournaments": {
           "$tournamentId": {
             ".write": "$grade.matches(/^(k|g[1-6])$/)",
-            ".validate": "$tournamentId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['name', 'version', 'updatedAt']) && (data.exists() ? newData.child('version').val() === data.child('version').val() + 1 : newData.child('version').val() === 1)"
+            ".validate": "$tournamentId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['name', 'version', 'updatedAt']) && (data.exists() ? (newData.child('version').val() === data.child('version').val() + 1 || (newData.child('version').val() === data.child('version').val() && newData.child('updatedAt').val() === data.child('updatedAt').val() && newData.child('date').val() === data.child('date').val() && newData.child('kind').val() === data.child('kind').val() && newData.child('title').val() === data.child('title').val() && newData.child('status').val() === data.child('status').val() && newData.child('start').val() === data.child('start').val() && newData.child('end').val() === data.child('end').val() && newData.child('venue').val() === data.child('venue').val() && newData.child('note').val() === data.child('note').val())) : newData.child('version').val() === 1)"
           }
         },
         "members": {
@@ -157,7 +157,7 @@
           ],
           "$eventId": {
             ".write": "$grade.matches(/^(k|g[1-6])$/)",
-            ".validate": "$eventId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['date', 'kind', 'title', 'status', 'version', 'updatedAt']) && (data.exists() ? newData.child('version').val() === data.child('version').val() + 1 : newData.child('version').val() === 1)",
+            ".validate": "$eventId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['date', 'kind', 'title', 'status', 'version', 'updatedAt']) && (data.exists() ? (newData.child('version').val() === data.child('version').val() + 1 || (newData.child('version').val() === data.child('version').val() && newData.child('updatedAt').val() === data.child('updatedAt').val() && newData.child('date').val() === data.child('date').val() && newData.child('kind').val() === data.child('kind').val() && newData.child('title').val() === data.child('title').val() && newData.child('status').val() === data.child('status').val() && newData.child('start').val() === data.child('start').val() && newData.child('end').val() === data.child('end').val() && newData.child('venue').val() === data.child('venue').val() && newData.child('note').val() === data.child('note').val())) : newData.child('version').val() === 1)",
             "date": {
               ".validate": "newData.isString() && newData.val().matches(/^20[0-9][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/)"
             },
@@ -215,7 +215,7 @@
         "tournaments": {
           "$tournamentId": {
             ".write": "$grade.matches(/^(k|g[1-6])$/)",
-            ".validate": "$tournamentId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['name', 'version', 'updatedAt']) && (data.exists() ? newData.child('version').val() === data.child('version').val() + 1 : newData.child('version').val() === 1)"
+            ".validate": "$tournamentId.matches(/^[A-Za-z0-9_-]{1,64}$/) && newData.hasChildren(['name', 'version', 'updatedAt']) && (data.exists() ? (newData.child('version').val() === data.child('version').val() + 1 || (newData.child('version').val() === data.child('version').val() && newData.child('updatedAt').val() === data.child('updatedAt').val() && newData.child('date').val() === data.child('date').val() && newData.child('kind').val() === data.child('kind').val() && newData.child('title').val() === data.child('title').val() && newData.child('status').val() === data.child('status').val() && newData.child('start').val() === data.child('start').val() && newData.child('end').val() === data.child('end').val() && newData.child('venue').val() === data.child('venue').val() && newData.child('note').val() === data.child('note').val())) : newData.child('version').val() === 1)"
           }
         },
         "members": {

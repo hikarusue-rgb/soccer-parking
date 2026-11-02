@@ -15,7 +15,11 @@ function gradeRules(root: string, coach: string) {
   const event = `${grade}.child('events').child($eventId)`;
   const deadline = `${event}.child('parking/deadlineAt')`;
   const lottery = `${grade}.child('lotteries').child($eventId)`;
-  const versioned = "(data.exists() ? newData.child('version').val() === data.child('version').val() + 1 : newData.child('version').val() === 1)";
+  // 版を1つ上げる保存（アプリ）か、版と更新時刻をそのままにした付帯情報だけの書き込み（クラブHPとのひも付け hp など）
+  // （付帯情報だけの書き込みでは、日付・予定名・時間・場所・開催状況などの中身は変えられない）
+  const same = ["version", "updatedAt", "date", "kind", "title", "status", "start", "end", "venue", "note"]
+    .map((k) => `newData.child('${k}').val() === data.child('${k}').val()`).join(" && ");
+  const versioned = `(data.exists() ? (newData.child('version').val() === data.child('version').val() + 1 || (${same})) : newData.child('version').val() === 1)`;
   const time = { ".validate": `newData.isString() && newData.val().matches(${TIME})` };
 
   // 車出しの回答（旧駐車場抽選アプリの仕様）

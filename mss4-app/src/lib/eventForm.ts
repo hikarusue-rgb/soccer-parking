@@ -45,6 +45,7 @@ export interface EventDraft {
   attachments: Attachment[];
   createdAt: number | null;
   legacy: TeamEvent["legacy"];
+  hp: TeamEvent["hp"];
 }
 
 /** 試合の2日前の17:00（旧駐車場アプリと同じ） */
@@ -58,7 +59,7 @@ export function blankDraft(date: string): EventDraft {
     start: "", end: "", meeting: "", kickoff: "", venue: "", opponent: "",
     uniform: { top: "", bottom: "", socks: "" }, equipment: [], equipmentConfirmed: false, messages: [], note: "",
     tournamentId: "", details: { format: "", referee: "", venueNotes: "" },
-    parkingMode: "none", parkingLimit: 0, deadline: "", confirmed: [], attachments: [], createdAt: null, legacy: null,
+    parkingMode: "none", parkingLimit: 0, deadline: "", confirmed: [], attachments: [], createdAt: null, legacy: null, hp: null,
   };
 }
 
@@ -79,6 +80,7 @@ export function draftFromEvent(e: TeamEvent, options: { duplicate?: boolean } = 
     attachments: dup ? [] : e.attachments,
     createdAt: dup ? null : e.createdAt,
     legacy: dup ? null : e.legacy,
+    hp: dup ? null : e.hp,
   };
 }
 
@@ -142,6 +144,7 @@ export function toStoredEvent(d: EventDraft): Record<string, unknown> {
     createdAt: d.createdAt ?? serverTimestamp(),
     updatedAt: serverTimestamp(),
     updatedBy: "コーチ",
+    hp: opt(d.hp, Boolean(d.hp)),
     legacy: opt(
       Object.fromEntries(Object.entries(d.legacy ?? {}).filter(([, v]) => typeof v === "string" && v)),
       Boolean(d.legacy && (d.legacy.calendarId || d.legacy.parkingEventId)),

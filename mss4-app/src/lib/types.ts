@@ -73,6 +73,25 @@ export interface TeamEvent {
   updatedAt: number;
   updatedBy: string;
   legacy: { calendarId?: string; parkingEventId?: string } | null;
+  /** クラブHPの予定表とのひも付け（GAS の自動反映が書く。アプリでは表示と保持だけ） */
+  hp: HpLink | null;
+}
+
+/** クラブHPから自動反映した内容（前回入れた値。コーチが直した項目を上書きしないために使う） */
+export interface HpLink {
+  key: string;
+  date?: string;
+  title?: string;
+  venue?: string;
+  kind?: string;
+  start?: string;
+  end?: string;
+  /** HPの補足（例：給食室側駐車場使用不可） */
+  note?: string;
+  text?: string;
+  /** HPの予定表から消えている */
+  removed?: boolean;
+  prevStatus?: string;
 }
 
 export interface Member {
