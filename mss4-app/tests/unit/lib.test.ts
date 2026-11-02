@@ -111,3 +111,43 @@ describe("読み込んだデータの補正", () => {
     expect(l.rounds[0]).toMatchObject({ round: 1, reason: "initial" });
   });
 });
+
+describe("新しい更新（前回見た版からの変更）", () => {
+  it("前回見た版より新しい変更だけをまとめ、ひと目で分かる言葉にする", async () => {
+    const { summarize } = await import("../../src/lib/updates.ts");
+    const items = [
+      { id: "h3", at: 3, version: 3, actor: "コーチ", type: "updated" as const, changes: [
+        { label: "集合時刻", before: "8:30", after: "9:00" },
+        { label: "駐車場", before: "抽選なし", after: "抽選あり・3台" },
+      ] },
+      { id: "h2", at: 2, version: 2, actor: "コーチ", type: "updated" as const, changes: [
+        { label: "集合時刻", before: "8:00", after: "8:30" },
+        { label: "当日資料", before: "なし", after: "タイムテーブル" },
+      ] },
+      { id: "h1", at: 1, version: 1, actor: "コーチ", type: "added" as const, changes: [] },
+    ];
+    const s = summarize(items, 1);
+    expect(s.added).toBe(false);
+    expect(s.changes.find((c) => c.label === "集合時刻")).toEqual({ label: "集合時刻", before: "8:00", after: "9:00" });
+    expect(s.phrases.map((p) => p.text)).toEqual(["⏰ 集合 8:00→9:00", "📄 要項・資料が届きました", "🚗 駐車場の受付が始まりました"]);
+    expect(summarize(items, 0).phrases[0].text).toBe("🆕 新しい予定");
+    expect(summarize(items, 3).phrases).toEqual([]);
+  });
+  it("中止は赤で目立たせる", async () => {
+    const { summarize } = await import("../../src/lib/updates.ts");
+    const s = summarize([{ id: "h", at: 1, version: 2, actor: "コーチ", type: "updated", changes: [{ label: "開催状況", before: "予定どおり", after: "中止" }] }], 1);
+    expect(s.phrases).toEqual([{ text: "☔ 中止", tone: "red" }]);
+  });
+  it("見ていない版・抽選結果だけを新しい更新にする", async () => {
+    const { isUnread, isLotteryUnread, baseline } = await import("../../src/lib/seen.ts");
+    const now = Date.parse("2026-11-02T00:00:00Z");
+    const e = { id: "e1", version: 3, updatedAt: now - 3600_000 } as never;
+    expect(isUnread(e, { e1: 2 }, now)).toBe(true);
+    expect(isUnread(e, { e1: 3 }, now)).toBe(false);
+    expect(isUnread({ id: "e1", version: 3, updatedAt: now - 20 * 86_400_000 } as never, {}, now)).toBe(false);
+    const l = { updatedAt: now - 1000 } as never;
+    expect(isLotteryUnread("e1", l, {}, now)).toBe(true);
+    expect(isLotteryUnread("e1", l, { "L:e1": now }, now)).toBe(false);
+    expect(baseline({ events: [e], lotteries: { e1: l } })).toEqual({ e1: 3, "L:e1": now - 1000 });
+  });
+});

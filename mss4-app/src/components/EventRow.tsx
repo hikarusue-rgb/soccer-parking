@@ -18,7 +18,7 @@ interface Props {
 /** 一覧の1行（タップで詳細へ） */
 export function EventRow({ event: e, today, unread, parking, hasDocs, showDate = true, onOpen }: Props) {
   return (
-    <button className={`event-row ${e.status === "canceled" ? "is-canceled" : ""}`} onClick={onOpen}>
+    <button className={`event-row ${e.status === "canceled" ? "is-canceled" : ""} ${unread ? "is-updated" : ""}`} onClick={onOpen}>
       {showDate && (
         <span className="event-date">
           <b>{dayLabel(e.date)}</b>

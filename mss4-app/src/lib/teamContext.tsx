@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { GradeCode, Role } from "./grade";
 import type { Route } from "./route";
-import { isUnread as unreadOf, useSeen } from "./seen";
+import { isLotteryUnread, isUnread as unreadOf, type Seen } from "./seen";
 import { hasDocs } from "./matches";
 import { parkingSummary, type ParkingSummary } from "./parking";
 import type { TeamData, TeamEvent } from "./types";
@@ -13,10 +13,15 @@ export interface TeamContextValue {
   data: TeamData;
   now: number;
   navigate: (route: Route, options?: { replace?: boolean; keepScroll?: boolean }) => void;
-  seen: Record<string, number>;
-  markSeen: (eventId: string, version: number) => void;
+  /** この端末で見た予定の版・抽選結果の時刻 */
+  seen: Seen;
+  /** 見たことにする（予定は {予定ID: 版}、抽選は {L:予定ID: 時刻}） */
+  markSeen: (entries: Record<string, number>) => void;
   seenStorable: boolean;
+  /** まだ見ていない変更がある予定 */
   isUnread: (e: TeamEvent) => boolean;
+  /** まだ見ていない抽選結果がある予定 */
+  isLotteryUnread: (e: TeamEvent) => boolean;
   parkingOf: (e: TeamEvent) => ParkingSummary | null;
   hasDocs: (e: TeamEvent) => boolean;
   /** LINE などで共有する予定の固定URL */
@@ -51,19 +56,21 @@ interface ProviderProps {
   role: Role;
   data: TeamData;
   navigate: TeamContextValue["navigate"];
+  seen: { seen: Seen; mark: (entries: Record<string, number>) => void; storable: boolean };
   children: ReactNode;
 }
 
-export function TeamProvider({ grade, role, data, navigate, children }: ProviderProps) {
+export function TeamProvider({ grade, role, data, navigate, seen: seenState, children }: ProviderProps) {
   const now = useNow();
-  const { seen, markSeen, storable } = useSeen(grade, role);
+  const { seen, mark: markSeen, storable } = seenState;
   const coach = role === "coach";
 
   const value = useMemo<TeamContextValue>(() => {
     const base = `${window.location.origin}${window.location.pathname}${window.location.search}`;
     return {
       grade, role, coach, data, now, navigate, seen, markSeen, seenStorable: storable,
-      isUnread: (e) => !coach && unreadOf(e, seen, now),
+      isUnread: (e) => unreadOf(e, seen, now),
+      isLotteryUnread: (e) => isLotteryUnread(e.id, data.lotteries[e.id], seen, now),
       parkingOf: (e) => parkingSummary(e, data.entries[e.id], data.lotteries[e.id], now),
       hasDocs,
       eventUrl: (e) => `${base}#event/${e.id}`,

@@ -667,3 +667,76 @@ body { background: var(--bg); }
 @media (prefers-reduced-motion: reduce) {
   .btn, .match-card, .tab-emoji, .sec-tabs button { transition: none; }
 }
+
+/* ═══ 新しい更新（ひと目で分かる目印：オレンジ） 2026-11-02 ═══ */
+:root { --alert: #ff6a13; --alert-dark: #c2410c; --alert-bg: #fff4ec; }
+@keyframes ring { 0%, 100% { transform: rotate(0); } 10% { transform: rotate(14deg); } 20% { transform: rotate(-12deg); } 30% { transform: rotate(8deg); } 40% { transform: rotate(0); } }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 #ff6a1355; } 50% { box-shadow: 0 0 0 6px #ff6a1300; } }
+
+.badge-update { background: var(--alert); color: #fff; box-shadow: 0 2px 8px #ff6a1350; }
+.new-flag { justify-self: start; display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 900; color: #fff; background: var(--alert); border-radius: 999px; padding: 1px 9px; margin-bottom: 2px; }
+
+/* 予定タブのいちばん上 */
+.updates-panel { display: grid; gap: 10px; background: #fff; border-radius: 20px; padding: 14px; box-shadow: var(--shadow), inset 0 0 0 2px var(--alert); }
+.updates-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.updates-head h2 { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 900; color: var(--alert-dark); }
+.updates-head h2 b { font-family: var(--num); font-size: 28px; line-height: 1; color: var(--alert); margin-left: 2px; }
+.updates-bell { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--alert); color: #fff; animation: glow 2s ease-in-out infinite; }
+.updates-bell svg { animation: ring 2.4s ease-in-out infinite; transform-origin: 50% 10%; }
+.updates-list { display: grid; gap: 8px; }
+.update-card { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; text-align: left; background: var(--alert-bg); border: 0; border-radius: 14px; padding: 10px 10px 10px 12px; }
+.update-card:hover { background: #ffead9; }
+.update-card.is-stop { background: #fff0f0; }
+.update-when { display: grid; justify-items: center; min-width: 58px; padding: 6px 4px; border-radius: 10px; background: #fff; line-height: 1.15; }
+.update-when b { font-family: var(--num); font-size: 18px; }
+.update-when small { font-size: 11px; color: var(--alert-dark); font-weight: 800; }
+.update-main { display: grid; gap: 4px; min-width: 0; }
+.update-title { font-size: 15.5px; font-weight: 900; overflow-wrap: anywhere; }
+.update-phrases { display: flex; flex-wrap: wrap; gap: 4px; }
+.phrase { font-size: 12.5px; font-weight: 800; border-radius: 8px; padding: 2px 8px; background: #fff; color: var(--ink); overflow-wrap: anywhere; }
+.phrase.tone-red { background: #fee2e2; color: #991b1b; }
+.phrase.tone-amber { background: #fff; color: #9a3412; box-shadow: inset 0 0 0 1px #fdba74; }
+.phrase.tone-green { background: #dcfce7; color: #166534; }
+.phrase.tone-blue { background: #e0e7ff; color: #3730a3; }
+.update-ago { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+.updates-none { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); padding: 2px 4px; }
+.updates-none svg { color: var(--brand); }
+
+/* カード・一覧の目印 */
+.upcoming-card.is-updated { box-shadow: var(--shadow), inset 0 0 0 2px var(--alert); }
+.upcoming-card.is-updated::before { background: var(--alert); }
+.upcoming-card.is-first.is-updated { box-shadow: inset 0 0 0 3px var(--alert); }
+.upcoming-card.is-first.is-updated::after { content: "🔔 更新"; background: var(--alert); color: #fff; letter-spacing: .04em; }
+.event-row.is-updated { background: var(--alert-bg); box-shadow: var(--shadow), inset 4px 0 0 var(--alert); }
+.match-card.is-updated { box-shadow: var(--shadow), inset 0 0 0 2px var(--alert); }
+.match-card.is-updated::before { background: var(--alert); }
+.doc-card.is-updated { box-shadow: var(--shadow), inset 0 0 0 2px var(--alert); }
+.doc-card.is-updated::before { background: var(--alert); }
+.day-event.is-updated { box-shadow: inset 0 0 0 1.5px var(--alert); }
+.day-update { display: inline-block; justify-self: start; font-size: 9px; font-weight: 900; color: #fff; background: var(--alert); border-radius: 4px; padding: 0 3px; line-height: 1.5; }
+
+/* 予定の画面：前回から変わったところ */
+.whats-new { display: grid; gap: 10px; background: #fff; border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow), inset 0 0 0 2px var(--alert); }
+.whats-new-head { display: flex; align-items: center; gap: 6px; font-weight: 900; color: var(--alert-dark); font-size: 15.5px; }
+.whats-new-head svg { color: var(--alert); animation: ring 2.4s ease-in-out 2; transform-origin: 50% 10%; }
+.whats-new-head small { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 700; }
+.whats-new-added { font-weight: 800; color: #166534; background: #dcfce7; border-radius: 10px; padding: 8px 10px; }
+.whats-new-list { display: grid; gap: 6px; }
+.whats-new-list li { display: grid; grid-template-columns: 1fr; gap: 2px; background: var(--alert-bg); border-radius: 10px; padding: 8px 10px; }
+.whats-new-list li > b { font-size: 12px; color: var(--alert-dark); }
+.wn-before { color: #7a6a62; text-decoration: line-through; text-decoration-color: #c9a99a; white-space: pre-line; font-size: 14px; }
+.wn-arrow { display: none; }
+.wn-after { font-weight: 900; font-size: 16px; color: var(--ink); white-space: pre-line; }
+.wn-after::before { content: "→ "; color: var(--alert); }
+@media (min-width: 560px) {
+  .whats-new-list li { grid-template-columns: 9em 1fr; align-items: baseline; column-gap: 10px; }
+  .whats-new-list li > b { grid-row: span 2; }
+}
+.sec-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--alert); margin-left: 4px; vertical-align: 2px; box-shadow: 0 0 0 2px #fff; }
+
+/* 下のタブ：予定の件数はオレンジ */
+.tab[href="#home"] .tab-count { background: var(--alert); animation: glow 2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .updates-bell, .updates-bell svg, .whats-new-head svg, .tab[href="#home"] .tab-count { animation: none; }
+}

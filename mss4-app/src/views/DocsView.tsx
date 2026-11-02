@@ -31,10 +31,10 @@ export function DocsView() {
     const pdfs = e.attachments.length - images.length;
     const parts = [images.length > 0 && `🖼 画像${images.length}`, pdfs > 0 && `📑 PDF${pdfs}`, Boolean(d.referee || d.venueNotes) && "📝 注意事項"].filter(Boolean);
     return (
-      <button key={e.id} className="doc-card" onClick={() => open(e)}>
+      <button key={e.id} className={`doc-card ${t.isUnread(e) ? "is-updated" : ""}`} onClick={() => open(e)}>
         <span className="doc-card-head">
           <span className="quick-date"><b>{dayLabel(e.date)}</b><small>{relativeDay(e.date, today)}</small></span>
-          <span className={`badge kind-${e.kind}`}>{KIND_LABELS[e.kind]}</span>
+          <span className="badges">{t.isUnread(e) && <span className="badge badge-update">🔔 更新</span>}<span className={`badge kind-${e.kind}`}>{KIND_LABELS[e.kind]}</span></span>
         </span>
         <b className="doc-title">{e.title}</b>
         {d.format && <span className="doc-line"><span>試合形式</span>{d.format}</span>}

@@ -56,9 +56,9 @@ export function MonthCalendar({ month, today, events, selected, isUnread, parkin
                 {plans.slice(0, 3).map((e) => {
                   const p = parkingOf(e);
                   return (
-                    <span key={e.id} className={`day-event kind-${e.kind} ${e.status === "canceled" ? "is-canceled" : ""}`}>
+                    <span key={e.id} className={`day-event kind-${e.kind} ${e.status === "canceled" ? "is-canceled" : ""} ${isUnread(e) ? "is-updated" : ""}`}>
                       <b>{e.kind === "notice" ? "連絡" : KIND_LABELS[e.kind]}</b>
-                      {isUnread(e) && <em className="day-update">更新</em>}
+                      {isUnread(e) && <em className="day-update">🔔更新</em>}
                       <span className="day-event-title">{e.title}</span>
                       {p && <span className={`day-parking parking-${p.phase}`}>{p.short}</span>}
                     </span>

@@ -19,6 +19,7 @@ export function MatchCard({ event: e, onOpen }: { event: TeamEvent; onOpen: () =
   const left = deadline !== null && !closed ? timeLeft(deadline, t.now) : null;
   const time = [e.meeting && `集合${e.meeting}`, e.kickoff && `KO${e.kickoff}`, e.end && `終了${e.end}`].filter(Boolean).join(" / ");
   const u = e.uniform;
+  const updated = t.isUnread(e) || t.isLotteryUnread(e);
 
   let badge: { label: string; tone: string } | null = null;
   if (e.status === "canceled") badge = { label: "中止", tone: "red" };
@@ -31,9 +32,10 @@ export function MatchCard({ event: e, onOpen }: { event: TeamEvent; onOpen: () =
   else if (left) badge = { label: `⏱ ${left}`, tone: "blue" };
 
   return (
-    <button className={`match-card ${e.status === "canceled" ? "is-canceled" : ""}`} onClick={onOpen}>
+    <button className={`match-card ${e.status === "canceled" ? "is-canceled" : ""} ${updated ? "is-updated" : ""}`} onClick={onOpen}>
       <span className="match-card-head">
         <span>
+          {updated && <span className="new-flag">🔔 {t.isLotteryUnread(e) ? "抽選結果" : "更新"}</span>}
           <b className="match-title">{e.title}</b>
           <span className="match-date">🗓 {dayLabel(e.date)}{e.kickoff ? ` ${e.kickoff}` : e.start ? ` ${e.start}` : ""}</span>
         </span>

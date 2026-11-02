@@ -14,7 +14,7 @@ export function EventBadges({ event, unread, parking, hasDocs }: Props) {
     <span className="badges">
       <span className={`badge kind-${event.kind}`}>{KIND_LABELS[event.kind]}</span>
       {event.status !== "scheduled" && <span className={`badge status-${event.status}`}>{STATUS_LABELS[event.status]}</span>}
-      {unread && <span className="badge badge-update">更新あり</span>}
+      {unread && <span className="badge badge-update">🔔 更新</span>}
       {parking && <span className={`badge parking-${parking.phase}`}>{parking.label}</span>}
       {hasDocs && <span className="badge badge-docs">📄 要項あり</span>}
     </span>

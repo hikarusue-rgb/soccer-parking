@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronRight, Clock, Download, History, List, MapPin, Plus } from "lucide-react";
-import { addDays, dayLabel, jstToday, relativeDay, shiftMonth, dateTimeLabel } from "../lib/datetime";
+import { CalendarDays, ChevronRight, Clock, Download, List, MapPin, Plus } from "lucide-react";
+import { addDays, dayLabel, jstToday, relativeDay, shiftMonth } from "../lib/datetime";
 import { timeSummary } from "../lib/eventView";
 import { blankDraft, type EventDraft } from "../lib/eventForm";
 import { createIcs, downloadIcs } from "../lib/ics";
@@ -10,6 +10,7 @@ import type { TeamEvent } from "../lib/types";
 import { EventBadges } from "../components/EventBadges";
 import { EventEditor } from "../components/EventEditor";
 import { EventRow } from "../components/EventRow";
+import { UpdatesPanel } from "../components/UpdatesPanel";
 import { MonthCalendar } from "../components/MonthCalendar";
 
 export function HomeView() {
@@ -22,10 +23,6 @@ export function HomeView() {
   const events = t.data.events;
 
   const upcoming = useMemo(() => events.filter((e) => e.date >= today && e.date <= addDays(today, 90)).slice(0, 3), [events, today]);
-  const unread = useMemo(
-    () => events.filter((e) => t.isUnread(e)).sort((a, b) => b.updatedAt - a.updatedAt),
-    [events, t],
-  );
   const monthEvents = events.filter((e) => e.date.startsWith(month));
   const listed = day ? events.filter((e) => e.date === day) : view === "list" ? monthEvents : [];
   const open = (e: TeamEvent, section?: EventSection) => t.navigate({ name: "event", id: e.id, section, from: "home" });
@@ -55,27 +52,7 @@ export function HomeView() {
         )}
       </section>
 
-      {!t.coach && (
-        <details className={`updates ${unread.length ? "has-updates" : ""}`}>
-          <summary>
-            <History size={18} aria-hidden="true" />
-            <strong>{unread.length ? `未確認の更新 ${unread.length}件` : "未確認の更新はありません"}</strong>
-          </summary>
-          <div className="updates-body">
-            <p>最近30日以内にコーチが追加・変更した予定です。予定を開いて「変更内容を見る」から確認してください。</p>
-            {unread.map((e) => (
-              <button key={e.id} className="update-item" onClick={() => open(e)}>
-                <span>
-                  <b>{dayLabel(e.date)}・{e.title}</b>
-                  <small>{dateTimeLabel(e.updatedAt)}・{e.version === 1 ? "予定を追加" : "予定を変更"}</small>
-                </span>
-                <ChevronRight size={18} aria-hidden="true" />
-              </button>
-            ))}
-            <small className="muted">確認済みの記録はこの端末・ブラウザに保存されます。コーチに既読を知らせる機能ではありません。{!t.seenStorable && "この端末では記録を保存できないため、画面を閉じるまで有効です。"}</small>
-          </div>
-        </details>
-      )}
+      <UpdatesPanel />
 
       <section aria-labelledby="upcoming-title">
         <div className="section-head">
@@ -92,9 +69,9 @@ export function HomeView() {
               const canPark = e.kind !== "notice";
               return (
                 <div key={e.id} className={`upcoming-wrap ${i === 0 ? "is-first" : ""}`}>
-                  <button className={`upcoming-card upcoming-${e.kind} ${i === 0 ? "is-first" : ""} ${e.status === "canceled" ? "is-canceled" : ""}`} onClick={() => open(e)}>
+                  <button className={`upcoming-card upcoming-${e.kind} ${i === 0 ? "is-first" : ""} ${e.status === "canceled" ? "is-canceled" : ""} ${t.isUnread(e) || t.isLotteryUnread(e) ? "is-updated" : ""}`} onClick={() => open(e)}>
                     <span className="upcoming-date"><b>{dayLabel(e.date)}</b><small>{relativeDay(e.date, today)}</small></span>
-                    <EventBadges event={e} unread={t.isUnread(e)} />
+                    <EventBadges event={e} unread={t.isUnread(e) || t.isLotteryUnread(e)} />
                     <span className="upcoming-title">{e.title}</span>
                     <span className="event-meta"><Clock size={15} aria-hidden="true" />{timeSummary(e)}</span>
                     <span className="event-meta"><MapPin size={15} aria-hidden="true" />{e.venue || "場所未定"}</span>
@@ -136,7 +113,7 @@ export function HomeView() {
             today={today}
             events={events}
             selected={day}
-            isUnread={t.isUnread}
+            isUnread={(e) => t.isUnread(e) || t.isLotteryUnread(e)}
             parkingOf={t.parkingOf}
             onSelect={setDay}
             onMonth={changeMonth}
@@ -161,7 +138,7 @@ export function HomeView() {
               <ul className="event-list">
                 {listed.map((e) => (
                   <li key={e.id}>
-                    <EventRow event={e} today={today} unread={t.isUnread(e)} parking={t.parkingOf(e)} hasDocs={t.hasDocs(e)} showDate={!day} onOpen={() => open(e)} />
+                    <EventRow event={e} today={today} unread={t.isUnread(e) || t.isLotteryUnread(e)} parking={t.parkingOf(e)} hasDocs={t.hasDocs(e)} showDate={!day} onOpen={() => open(e)} />
                   </li>
                 ))}
               </ul>

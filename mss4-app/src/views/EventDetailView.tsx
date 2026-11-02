@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, Clock, Copy, MapPin, Pencil, Settings2, Share2 } from "lucide-react";
 import { dateTimeLabel, dayLabel, jstToday, relativeDay } from "../lib/datetime";
 import { draftFromEvent, type EventDraft } from "../lib/eventForm";
 import { isInactive, timeSummary } from "../lib/eventView";
 import type { EventSection, TabName } from "../lib/route";
 import { createIcs, downloadIcs, googleCalendarUrl } from "../lib/ics";
+import { lotteryKey } from "../lib/seen";
 import { useTeam } from "../lib/teamContext";
 import { STATUS_LABELS, type TeamEvent } from "../lib/types";
 import { ChangeHistory } from "../components/ChangeHistory";
@@ -39,6 +40,7 @@ export function EventDetailView({ id, section = "info", from, onBack }: { id: st
   const parking = t.parkingOf(event);
   const hasDocText = Boolean(event.details.format || event.details.referee || event.details.venueNotes);
   const current: EventSection = section === "parking" && !canPark ? "info" : section;
+  const lotteryNew = t.isLotteryUnread(event) && current !== "parking";
   const go = (next: EventSection) => t.navigate({ name: "event", id: event.id, section: next, from }, { replace: true, keepScroll: true });
 
   async function share(e: TeamEvent) {
@@ -81,13 +83,15 @@ export function EventDetailView({ id, section = "info", from, onBack }: { id: st
         <div className={`change-banner ${isInactive(event) ? "is-stop" : ""}`}>☔ 開催状況：{STATUS_LABELS[event.status]}{isInactive(event) && "（集合不要・再案内を確認してください）"}</div>
       )}
 
+      <ChangeHistory event={event} showLog={false} />
+
       <nav className={`sec-tabs ${canPark ? "" : "two"}`} aria-label="この予定の画面">
         <button aria-current={current === "info" ? "page" : undefined} onClick={() => go("info")}>
           <span>📋 概要</span><small>{isMatch ? "時間・会場" : "時間・場所"}</small>
         </button>
         {canPark && (
           <button aria-current={current === "parking" ? "page" : undefined} className={hasParking ? `is-on phase-${parking?.phase ?? "open"}` : ""} onClick={() => go("parking")}>
-            <span>🚗 駐車場</span><small>{parkingSub}</small>
+            <span>🚗 駐車場{lotteryNew && <i className="sec-dot" aria-label="新しい抽選結果" />}</span><small>{lotteryNew ? "抽選結果" : parkingSub}</small>
           </button>
         )}
         <button aria-current={current === "docs" ? "page" : undefined} className={event.attachments.length || hasDocText ? "is-on" : ""} onClick={() => go("docs")}>
@@ -97,8 +101,8 @@ export function EventDetailView({ id, section = "info", from, onBack }: { id: st
 
       {current === "info" && (
         <>
-          <ChangeHistory event={event} />
           <Yokou event={event} />
+          <ChangeHistory event={event} />
           <div className="detail-tools">
             <button className="btn btn-small" onClick={() => share(event)}><Share2 size={15} aria-hidden="true" />この{isMatch ? "試合" : "予定"}をLINEで共有</button>
           </div>
@@ -107,6 +111,7 @@ export function EventDetailView({ id, section = "info", from, onBack }: { id: st
         </>
       )}
 
+      {current === "parking" && <LotterySeen event={event} />}
       {current === "parking" && (
         hasParking ? (
           <>
@@ -198,4 +203,15 @@ function Yokou({ event: e }: { event: TeamEvent }) {
       {!hasAny && <p className="muted center">※ 詳細はまだ未入力です</p>}
     </section>
   );
+}
+
+/** 駐車場を開いたら、その抽選結果を見たことにする */
+function LotterySeen({ event }: { event: TeamEvent }) {
+  const t = useTeam();
+  const at = t.data.lotteries[event.id]?.updatedAt;
+  const { markSeen } = t;
+  useEffect(() => {
+    if (at) markSeen({ [lotteryKey(event.id)]: at });
+  }, [markSeen, event.id, at]);
+  return null;
 }

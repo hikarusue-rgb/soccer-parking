@@ -11,17 +11,28 @@ interface Services {
 
 let services: Services | null = null;
 
-/** Firebase の初期化（開発時はローカルのエミュレータにだけ接続する） */
+/**
+ * Firebase の初期化（開発時はローカルのエミュレータにだけ接続する）。
+ * ログイン（Auth）は使うときだけ準備する。合言葉なしで使う今は準備しないので、
+ * 端末に古いログイン情報が残っていても、データの読み込みがログインの確認待ちで止まらない。
+ */
 export function firebase(): Services {
   if (services) return services;
   const app = initializeApp(FIREBASE_CONFIG);
-  const auth = getAuth(app);
   const db = getDatabase(app);
-  if (TARGET === "emulator") {
-    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
-    connectDatabaseEmulator(db, "127.0.0.1", 9000);
-  }
-  services = { app, auth, db };
+  if (TARGET === "emulator") connectDatabaseEmulator(db, "127.0.0.1", 9000);
+  let auth: Auth | null = null;
+  services = {
+    app,
+    db,
+    get auth() {
+      if (!auth) {
+        auth = getAuth(app);
+        if (TARGET === "emulator") connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+      }
+      return auth;
+    },
+  };
   return services;
 }
 

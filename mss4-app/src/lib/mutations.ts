@@ -6,6 +6,7 @@ import type { GradeCode } from "./grade";
 import type { Lottery, Member } from "./types";
 import { toStoredEvent, type EventDraft } from "./eventForm";
 import type { EventSnapshot } from "./changes";
+import { announceSaved, lotteryKey } from "./seen";
 
 export class SaveError extends Error {}
 
@@ -44,6 +45,7 @@ export async function saveEvent(
   } catch (error) {
     throw explain(error);
   }
+  announceSaved(id, Number(stored.version));
   return id;
 }
 
@@ -79,6 +81,8 @@ export async function saveLottery(grade: GradeCode, eventId: string, lottery: Om
   } catch (error) {
     throw explain(error);
   }
+  // 自分で引いた抽選は「新しい更新」にしない（サーバー時刻との差を見込んで少し先まで見たことにする）
+  announceSaved(lotteryKey(eventId), Date.now() + 5 * 60_000);
 }
 
 /** 抽選結果を取り消す（コーチのみ。エントリーは残る） */

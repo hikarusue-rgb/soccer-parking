@@ -4,6 +4,7 @@ import { GRADE_LABELS, parseGrade, type GradeCode, type Role } from "./lib/grade
 import { tabOf, useRoute } from "./lib/route";
 import { logOut, useSession } from "./lib/session";
 import { hasParking } from "./lib/matches";
+import { isLotteryUnread, isUnread, useSeen } from "./lib/seen";
 import { useTeamData } from "./lib/teamData";
 import { TeamProvider } from "./lib/teamContext";
 import { AppHeader } from "./components/AppHeader";
@@ -35,13 +36,15 @@ function Shell({ grade, role }: { grade: GradeCode; role: Role }) {
   const [coachLogin, setCoachLogin] = useState(false);
   const [changingPassphrase, setChangingPassphrase] = useState(false);
   const coach = role === "coach";
-  // 下のタブに出す件数：締切前で受付中の駐車場抽選
+  const seen = useSeen(grade, data);
+  // 下のタブに出す件数：予定＝まだ見ていない更新、駐車場＝締切前で受付中の抽選
   const counts = useMemo(() => {
-    if (!data) return {};
+    if (!data || !seen.ready) return {};
     const now = Date.now();
     const open = data.events.filter((e) => hasParking(e) && !data.lotteries[e.id] && (e.parking.deadlineAt === null || now < e.parking.deadlineAt) && e.status !== "canceled");
-    return { parking: open.length };
-  }, [data]);
+    const updates = data.events.filter((e) => isUnread(e, seen.seen, now) || isLotteryUnread(e.id, data.lotteries[e.id], seen.seen, now));
+    return { home: updates.length, parking: open.length };
+  }, [data, seen.seen, seen.ready]);
 
   // コーチとしてログインできたらダイアログを閉じる
   useEffect(() => {
@@ -65,7 +68,7 @@ function Shell({ grade, role }: { grade: GradeCode; role: Role }) {
         {error && <div className="alert alert-error" role="alert">{error}</div>}
         {!data && !error && <p className="loading" aria-busy="true">読み込んでいます…</p>}
         {data && (
-          <TeamProvider grade={grade} role={role} data={data} navigate={navigate}>
+          <TeamProvider grade={grade} role={role} data={data} navigate={navigate} seen={seen}>
             {view}
           </TeamProvider>
         )}

@@ -9,13 +9,16 @@ import { accountEmail, roleOf, type GradeCode, type Role } from "./grade";
 export type Session = { status: "loading" } | { status: "ready"; role: Role; uid: string | null };
 
 export function useSession(grade: GradeCode): Session {
-  const [session, setSession] = useState<Session>({ status: "loading" });
+  const [session, setSession] = useState<Session>(
+    EVERYONE_EDITS ? { status: "ready", role: "coach", uid: null } : { status: "loading" },
+  );
   useEffect(() => {
+    // 合言葉なしで誰でも編集できる（2026-11-02 ユーザー判断）：ログインの確認はしない
+    if (EVERYONE_EDITS) return;
     const { auth } = firebase();
     return onAuthStateChanged(auth, (user) => {
       // テスト環境では合言葉なしで全員がコーチの操作を試せる
-      // 合言葉なしで誰でも編集できる（2026-11-02 ユーザー判断）
-      const coach = EVERYONE_EDITS || TEST_MODE || roleOf(user?.email, grade) === "coach";
+      const coach = TEST_MODE || roleOf(user?.email, grade) === "coach";
       setSession({ status: "ready", role: coach ? "coach" : "parent", uid: user?.uid ?? null });
     });
   }, [grade]);
