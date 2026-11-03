@@ -244,11 +244,12 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
           )}
 
           <Group label="📝 備考">
-            <div className="chips">
-              {[...new Set([...MESSAGE_CHOICES, ...d.messages])].map((m) => (
+            {/* 定型文（サブ・ビブス・着替え持参）は試合だけ。練習は自由記述だけ（2026-11-03 ユーザー指定） */}
+            {(isMatch || d.messages.length > 0) && <div className="chips">
+              {[...new Set([...(isMatch ? MESSAGE_CHOICES : []), ...d.messages])].map((m) => (
                 <Chip key={m} pressed={d.messages.includes(m)} onClick={() => set("messages", toggle(d.messages, m))}>{m}</Chip>
               ))}
-            </div>
+            </div>}
             <textarea className="input" rows={3} value={d.note} maxLength={2000} onChange={(e) => set("note", e.target.value)} aria-label="備考" />
           </Group>
 
