@@ -36,7 +36,7 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
 
   async function draw() {
     if (!plan) return;
-    if (plan.reason === "initial" && !closed && !window.confirm("回答締切の前ですが、抽選しますか？\nこの時点で駐車場を希望している人だけが対象になります。")) return;
+    if (plan.reason === "initial" && !closed && !window.confirm("回答締切の前ですが、いま手動で抽選しますか？\nこの時点で駐車場を希望している人だけが対象になり、締切後の自動抽選は行いません。")) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -73,7 +73,7 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
   const drawButton = plan && (
     <button className="btn btn-yellow btn-block" onClick={draw} disabled={busy}>
       {busy ? "抽選しています…"
-        : plan.reason === "initial" ? (plan.participants.length <= plan.slots ? "✅ 全員当選で確定する" : "🎰 あみだくじで抽選する")
+        : plan.reason === "initial" ? (plan.participants.length <= plan.slots ? "✅ いま全員当選で確定する（手動）" : "🎰 いま抽選する（手動）")
         : plan.reason === "limit_down" ? `☔ 台数減の再抽選（当選${plan.participants.length}名 → ${plan.slots}台）`
         : `🔄 再抽選を実施（空き${plan.slots}枠 / 候補${plan.participants.length}名）`}
     </button>
@@ -124,11 +124,12 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
         </div>
       )}
 
+      {!lottery && event.parking.mode === "lottery" && <AutoDrawNote deadline={deadline} closed={closed} canceled={event.status === "canceled" || event.status === "postponed"} />}
       {!lottery && hopefuls.length > slots && slots > 0 && (
         <div className="notice notice-amber">
           <b>⚠️ 抽選が必要です</b>
           <p>希望 {hopefuls.length}名 ＞ 抽選枠 {slots}台</p>
-          {t.coach ? drawButton : <p className="muted">締切後にコーチが抽選します。</p>}
+          {t.coach && drawButton}
         </div>
       )}
       {!lottery && hopefuls.length > 0 && hopefuls.length <= slots && (
@@ -162,14 +163,26 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
   );
 }
 
+/** 自動抽選の案内（締切後にGASが15分ごとに確認して抽選する。締切なしは手動だけ） */
+function AutoDrawNote({ deadline, closed, canceled }: { deadline: number | null; closed: boolean; canceled: boolean }) {
+  if (canceled) return null;
+  if (deadline === null) return <p className="auto-note">✋ 回答締切がないため、自動では抽選しません。「いま抽選する」ボタンで抽選してください。</p>;
+  return closed
+    ? <p className="auto-note is-soon">🤖 締切を過ぎました。15分以内に自動で抽選します（待たずに手動で抽選することもできます）。</p>
+    : <p className="auto-note">🤖 回答締切（{dateTimeLabel(deadline)}）を過ぎると、自動で抽選します。全員の回答がそろっていれば、手動でいま抽選することもできます。</p>;
+}
+
 /** 抽選結果（旧アプリの結果画面と同じ並び） */
 function Results({ event, onReplay, onShare }: { event: TeamEvent; onReplay?: () => void; onShare?: () => void }) {
   const t = useTeam();
   const entries = t.data.entries[event.id] ?? {};
   const g = groupMembers(event, t.data.members, entries, t.data.lotteries[event.id]);
   const carpool = (m: Member) => (entries[m.id]?.carpoolCapacity ? `（乗合+${entries[m.id].carpoolCapacity}）` : "");
+  const lot = t.data.lotteries[event.id];
+  const last = lot?.rounds[lot.rounds.length - 1];
   return (
     <div className="results">
+      {last && <p className="draw-by">{last.by === "auto" ? "🤖 自動抽選" : "✋ 手動で抽選"}・{dateTimeLabel(last.at)}{lot && lot.rounds.length > 1 ? `（${lot.rounds.length}回目）` : ""}</p>}
       <div className="result-block win">
         <p>🚗 当選 {g.winners.length}名</p>
         {g.winners.length ? <ul>{g.winners.map((m) => <li key={m.id}>🎊 #{m.num} {m.name}{carpool(m)}</li>)}</ul> : <span className="muted">当選者なし</span>}

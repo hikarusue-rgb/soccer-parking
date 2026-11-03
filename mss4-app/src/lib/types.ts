@@ -121,6 +121,8 @@ export interface LotteryRound {
   reason: LotteryReason;
   participants: string[];
   winners: string[];
+  /** auto＝締切後にGASが自動で抽選、manual＝画面の「抽選する」ボタン */
+  by?: "auto" | "manual";
 }
 
 /** 直近の抽選のあみだくじ（保護者もあとから再生できるように保存する） */

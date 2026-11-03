@@ -293,14 +293,29 @@ function Stepper({ label, hint, value, disabled, onChange }: { label: string; hi
   );
 }
 
+/** 時刻の候補：08:00から始まる15分刻み（〜20:45）。早朝（05:00〜07:45）は後ろにまとめる */
+const TIME_OPTIONS = (() => {
+  const list: string[] = [];
+  const add = (from: number, to: number) => {
+    for (let m = from; m < to; m += 15) list.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+  };
+  add(8 * 60, 21 * 60);
+  add(5 * 60, 8 * 60);
+  return list;
+})();
+
+/** 時刻は選ぶだけ（スマホで開くと 08:00 から並ぶ。いまの時刻から探さなくてよい） */
 function TimeInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const options = value && !TIME_OPTIONS.includes(value) ? [value, ...TIME_OPTIONS] : TIME_OPTIONS;
   return (
     <Field label={label}>
       {(id) => (
-        <span className="time-input">
-          <input id={id} className="input" type="time" step={300} value={value} onChange={(e) => onChange(e.target.value)} />
-          {value && <button type="button" className="time-clear" aria-label={`${label}を未定にする`} onClick={() => onChange("")}>未定</button>}
-        </span>
+        <select id={id} className="input time-select" value={value} onChange={(e) => onChange(e.target.value)}>
+          <option value="">未定</option>
+          {options.map((t, i) => (
+            <option key={t} value={t}>{t}{i > 0 && t === "05:00" ? "（早朝）" : ""}</option>
+          ))}
+        </select>
       )}
     </Field>
   );

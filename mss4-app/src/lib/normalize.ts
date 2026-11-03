@@ -126,6 +126,7 @@ export function toLottery(value: unknown): Lottery {
         reason: REASONS.includes(r.reason as LotteryReason) ? (r.reason as LotteryReason) : "initial",
         participants: strings(r.participants),
         winners: strings(r.winners),
+        by: r.by === "auto" ? "auto" : "manual",
       };
     }),
     conductedAt: num(l.conductedAt),

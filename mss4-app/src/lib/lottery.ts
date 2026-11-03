@@ -121,7 +121,7 @@ export function nextDraw(e: TeamEvent, entries: Record<string, Entry> | undefine
 }
 
 /** 抽選を実行して保存用の結果を作る（希望者が枠以下なら全員当選。あみだくじは演出と記録のために作る） */
-export function runDraw(plan: DrawPlan, previous: Lottery | undefined, now: number, random: Random = secureRandom): { lottery: Omit<Lottery, "updatedAt">; ladder: Ladder } {
+export function runDraw(plan: DrawPlan, previous: Lottery | undefined, now: number, random: Random = secureRandom, by: "auto" | "manual" = "manual"): { lottery: Omit<Lottery, "updatedAt">; ladder: Ladder } {
   const ladder = buildLadder(plan.participants, plan.slots, random);
   const drawn = ladderWinners(ladder);
   const winners = plan.reason === "limit_down" ? drawn : [...plan.keep, ...drawn];
@@ -136,7 +136,7 @@ export function runDraw(plan: DrawPlan, previous: Lottery | undefined, now: numb
       slots: plan.reason === "limit_down" ? plan.slots : plan.keep.length + plan.slots,
       participants,
       winners,
-      rounds: [...(previous?.rounds ?? []), { round, at: now, reason: plan.reason, participants: plan.participants, winners: drawn }],
+      rounds: [...(previous?.rounds ?? []), { round, at: now, reason: plan.reason, participants: plan.participants, winners: drawn, by }],
       conductedAt: previous?.conductedAt ?? now,
     },
   };
