@@ -8,7 +8,7 @@ import type { TeamEvent } from "./types";
 export async function quickSave(grade: GradeCode, event: TeamEvent, patch: Partial<EventDraft>): Promise<void> {
   const draft: EventDraft = { ...draftFromEvent(event), ...patch };
   draft.parkingMode = draft.parkingLimit > 0 ? "lottery" : "none";
-  if (draft.parkingMode === "none") draft.confirmed = [];
+  if (draft.parkingMode === "none") { draft.confirmed = []; draft.reserved = 0; }
   const problems = validateDraft(draft);
   if (problems.length) throw new SaveError(problems[0]);
   await saveEvent(grade, draft, { before: snapshotOfEvent(event), after: snapshotOfDraft(draft) });

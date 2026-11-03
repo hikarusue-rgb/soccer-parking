@@ -31,4 +31,4 @@ export const md = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.s
 /** 駐車場の抽選をしている予定か（お知らせは対象外） */
 export const hasParking = (e: TeamEvent) => e.kind !== "notice" && e.parking.mode === "lottery" && e.parking.limit > 0;
 /** 要項（資料・試合形式・審判・注意事項）が入っている予定か */
-export const hasDocs = (e: TeamEvent) => e.attachments.length > 0 || Boolean(e.details.format || e.details.referee || e.details.venueNotes);
+export const hasDocs = (e: TeamEvent) => e.attachments.length > 0;

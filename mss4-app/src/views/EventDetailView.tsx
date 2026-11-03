@@ -35,11 +35,12 @@ export function EventDetailView({ id, section = "info", from, onBack }: { id: st
 
   const today = jstToday(t.now);
   const isMatch = event.kind === "match";
-  const canPark = event.kind !== "notice";
+  // 駐車場の抽選は試合だけ。要項は試合か、資料が付いている予定（2026-11-03 ユーザー指定）
+  const canPark = event.kind === "match" || (event.parking.mode === "lottery" && event.parking.limit > 0);
+  const canDocs = event.kind === "match" || event.attachments.length > 0;
   const hasParking = canPark && event.parking.mode === "lottery" && event.parking.limit > 0;
   const parking = t.parkingOf(event);
-  const hasDocText = Boolean(event.details.format || event.details.referee || event.details.venueNotes);
-  const current: EventSection = section === "parking" && !canPark ? "info" : section;
+  const current: EventSection = (section === "parking" && !canPark) || (section === "docs" && !canDocs) ? "info" : section;
   const lotteryNew = t.isLotteryUnread(event) && current !== "parking";
   const go = (next: EventSection) => t.navigate({ name: "event", id: event.id, section: next, from }, { replace: true, keepScroll: true });
 
@@ -59,7 +60,7 @@ export function EventDetailView({ id, section = "info", from, onBack }: { id: st
   }
 
   const parkingSub = hasParking ? (parking ? parking.label.replace("🚗 ", "") : `${event.parking.limit}台`) : t.coach ? "＋設定する" : "なし";
-  const docsSub = event.attachments.length ? `資料${event.attachments.length}件` : hasDocText ? "あり" : t.coach ? "＋追加する" : "未着";
+  const docsSub = event.attachments.length ? `資料${event.attachments.length}件` : t.coach ? "＋追加する" : "未着";
 
   return (
     <article className="detail">
@@ -73,19 +74,19 @@ export function EventDetailView({ id, section = "info", from, onBack }: { id: st
         <p className="hero-meta"><MapPin size={15} aria-hidden="true" />{event.venue || "場所未定"}</p>
         {t.coach && (
           <div className="coach-actions">
-            <button className="btn btn-small" onClick={() => setEditor(draftFromEvent(event))}><Pencil size={15} aria-hidden="true" />{isMatch ? "試合を編集" : "予定を編集"}</button>
+            <button className="btn btn-small" onClick={() => setEditor(draftFromEvent(event))}><Pencil size={15} aria-hidden="true" />{isMatch ? "試合を編集" : event.kind === "practice" ? "練習を編集" : "予定を編集"}</button>
             <button className="btn btn-small" onClick={() => setEditor(draftFromEvent(event, { duplicate: true }))}><Copy size={15} aria-hidden="true" />複製</button>
           </div>
         )}
       </header>
 
-      {event.status !== "scheduled" && (
+      {(event.status === "canceled" || event.status === "postponed") && (
         <div className={`change-banner ${isInactive(event) ? "is-stop" : ""}`}>☔ 開催状況：{STATUS_LABELS[event.status]}{isInactive(event) && "（集合不要・再案内を確認してください）"}</div>
       )}
 
       <ChangeHistory event={event} showLog={false} />
 
-      <nav className={`sec-tabs ${canPark ? "" : "two"}`} aria-label="この予定の画面">
+      {(canPark || canDocs) && <nav className={`sec-tabs ${canPark && canDocs ? "" : "two"}`} aria-label="この予定の画面">
         <button aria-current={current === "info" ? "page" : undefined} onClick={() => go("info")}>
           <span>📋 概要</span><small>{isMatch ? "時間・会場" : "時間・場所"}</small>
         </button>
@@ -94,10 +95,12 @@ export function EventDetailView({ id, section = "info", from, onBack }: { id: st
             <span>🚗 駐車場{lotteryNew && <i className="sec-dot" aria-label="新しい抽選結果" />}</span><small>{lotteryNew ? "抽選結果" : parkingSub}</small>
           </button>
         )}
-        <button aria-current={current === "docs" ? "page" : undefined} className={event.attachments.length || hasDocText ? "is-on" : ""} onClick={() => go("docs")}>
-          <span>📄 要項</span><small>{docsSub}</small>
-        </button>
-      </nav>
+        {canDocs && (
+          <button aria-current={current === "docs" ? "page" : undefined} className={event.attachments.length ? "is-on" : ""} onClick={() => go("docs")}>
+            <span>📄 要項</span><small>{docsSub}</small>
+          </button>
+        )}
+      </nav>}
 
       {current === "info" && (
         <>
@@ -186,14 +189,13 @@ function Yokou({ event: e }: { event: TeamEvent }) {
       )}
       {(e.messages.length > 0 || e.note) && (
         <div className="yk-item">
-          <small>📝 備考・チームからの連絡</small>
+          <small>📝 備考</small>
           {e.messages.map((m) => <p key={m}>{m}</p>)}
           {e.note && <p className="preline">{e.note}</p>}
         </div>
       )}
       {e.hp?.removed && <div className="hp-removed" role="alert">⚠️ この予定はクラブHPの予定表から消えています。中止・変更の可能性があるので、コーチに確認してください。</div>}
       {e.hp?.note && !e.hp.removed && <div className="yk-item hp-note"><small>🏫 クラブHPの補足</small><b>{e.hp.note}</b></div>}
-      {e.equipmentConfirmed && <div className="yk-item"><small>🎒 持ち物</small><b>{e.equipment.join("・") || "指定なし"}</b></div>}
       <div className="yk-item">
         <small>📅 カレンダーに追加</small>
         <div className="inline-row">

@@ -30,7 +30,9 @@ export interface ParkingSettings {
   limit: number;
   /** 応募締切（ミリ秒） */
   deadlineAt: number | null;
-  /** 確定枠（抽選対象外のメンバーID） */
+  /** 抽選外枠の台数（審判・コーチなど。誰が使うかはアプリでは決めない）。駐車可能台数 limit に含む */
+  reserved: number;
+  /** 以前の「確定枠」（抽選対象外のメンバーID）。過去の予定の表示用に残す */
   confirmed: string[];
 }
 

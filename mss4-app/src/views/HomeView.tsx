@@ -66,7 +66,7 @@ export function HomeView() {
             {upcoming.map((e, i) => {
               const parking = t.parkingOf(e);
               const docs = t.hasDocs(e);
-              const canPark = e.kind !== "notice";
+              const canPark = e.kind === "match"; // 駐車場・要項は試合だけ
               return (
                 <div key={e.id} className={`upcoming-wrap ${i === 0 ? "is-first" : ""}`}>
                   <button className={`upcoming-card upcoming-${e.kind} ${i === 0 ? "is-first" : ""} ${e.status === "canceled" ? "is-canceled" : ""} ${t.updateState(e) === "unread" ? "is-updated" : t.updateState(e) === "recent" ? "is-recent" : ""}`} onClick={() => open(e)}>

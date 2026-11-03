@@ -41,9 +41,11 @@ export function resultText(e: TeamEvent, members: Member[], entries: Record<stri
   const lines = ["🏆 駐車場抽選結果", `📌 ${e.title}`, `🗓 ${dayLabel(e.date)}`];
   if (e.venue) lines.push(`📍 ${e.venue}`, `🗺 ${mapUrl(e.venue)}`);
   lines.push(LINE);
+  const reserved = Math.max(e.parking.reserved ?? 0, e.parking.confirmed.length);
+  if (reserved > g.confirmed.length) lines.push(`🔒 抽選外枠 ${reserved}台（審判など）`);
   if (g.confirmed.length || g.winners.length) {
     lines.push("🚗 【車を出す方】");
-    if (g.confirmed.length) lines.push(` 🔒確定: ${g.confirmed.map(withCarpool).join(", ")}`);
+    if (g.confirmed.length) lines.push(` 🔒抽選外: ${g.confirmed.map(withCarpool).join(", ")}`);
     if (g.winners.length) lines.push(` 🎯当選: ${g.winners.map(withCarpool).join(", ")}`);
     lines.push(LINE);
   }

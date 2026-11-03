@@ -1,4 +1,5 @@
 // 駐車場抽選の状態（カード・月カレンダーのバッジ、詳細の見出しで共通に使う）
+import { reservedOf } from "./lottery";
 import type { Entry, Lottery, TeamEvent } from "./types";
 
 export type ParkingPhase = "open" | "closed" | "drawn";
@@ -31,7 +32,7 @@ export function parkingSummary(
   if (e.parking.mode !== "lottery") return null;
   const applicants = applicantsOf(e, entries);
   const limit = e.parking.limit;
-  const demand = e.parking.confirmed.length + applicants.length;
+  const demand = reservedOf(e) + applicants.length;
   if (lottery) return { phase: "drawn", limit, demand, applicants, label: "🚗 配車確定", short: "🚗確定" };
   if (e.parking.deadlineAt !== null && now >= e.parking.deadlineAt) {
     return { phase: "closed", limit, demand, applicants, label: `🚗 締切 ${demand}/${limit}台・抽選待ち`, short: "🚗締切" };

@@ -67,9 +67,14 @@ export function ladderWinners(ladder: Ladder): string[] {
   return ladder.order.filter((_, i) => results[i] < ladder.slots);
 }
 
-/** 抽選の対象になる台数（上限 − 確定枠） */
+/** 抽選外枠の台数（以前の確定枠の人数も含めて、多いほう） */
+export function reservedOf(e: TeamEvent): number {
+  return Math.max(e.parking.reserved ?? 0, e.parking.confirmed.length);
+}
+
+/** 抽選の対象になる台数（合計 − 抽選外枠） */
 export function lotterySlots(e: TeamEvent): number {
-  return Math.max(0, e.parking.limit - e.parking.confirmed.length);
+  return Math.max(0, e.parking.limit - reservedOf(e));
 }
 
 const wantsParking = (entries: Record<string, Entry> | undefined, id: string) => Boolean(entries?.[id]?.attending && entries[id].parkingNeeded);

@@ -1,6 +1,6 @@
 import { dateTimeLabel, dayLabel, timeLeft } from "../lib/datetime";
 import { applicantsOf } from "../lib/parking";
-import { lotterySlots } from "../lib/lottery";
+import { lotterySlots, reservedOf } from "../lib/lottery";
 import { useTeam } from "../lib/teamContext";
 import type { TeamEvent } from "../lib/types";
 
@@ -59,7 +59,7 @@ export function MatchCard({ event: e, onOpen }: { event: TeamEvent; onOpen: () =
             <span className="stat"><b className="amber">{hopefuls}</b><small>駐車場希望</small></span>
             <span className="stat"><b className="blue">{e.parking.limit}</b><small>台まで可</small></span>
           </span>
-          {e.parking.confirmed.length > 0 && <span className="match-note blue">🔒 確定枠{e.parking.confirmed.length}台 ／ 抽選枠{slots}台</span>}
+          {reservedOf(e) > 0 && <span className="match-note blue">🎯 抽選枠{slots}台 ／ 🔒 抽選外枠{reservedOf(e)}台</span>}
           {deadline !== null && <span className="match-note">締切: {dateTimeLabel(deadline)}</span>}
         </>
       ) : (

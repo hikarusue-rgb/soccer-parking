@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Share2, Undo2 } from "lucide-react";
 import { dateTimeLabel, timeLeft } from "../lib/datetime";
 import { groupMembers, reminderText, resultText, shareText } from "../lib/lineText";
-import { lotterySlots, lotteryState, nextDraw, runDraw } from "../lib/lottery";
+import { lotterySlots, reservedOf, lotteryState, nextDraw, runDraw } from "../lib/lottery";
 import { SaveError, clearLottery, saveEntry, saveLottery } from "../lib/mutations";
 import { useMyMember } from "../lib/myMember";
 import { applicantsOf } from "../lib/parking";
@@ -20,6 +20,7 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
   const confirmed = event.parking.confirmed;
   const confirmedMembers = confirmed.map((id) => byId.get(id)).filter((m): m is Member => Boolean(m));
   const slots = lotterySlots(event);
+  const reserved = reservedOf(event);
   const hopefuls = applicantsOf(event, entries);
   const answered = activeMembers.filter((m) => entries[m.id]).length;
   const deadline = event.parking.deadlineAt;
@@ -85,14 +86,14 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
       <div className="stats">
         <span className="stat"><b>{answered}<small>/{activeMembers.length}</small></b><small>回答済み</small></span>
         <span className="stat"><b className="amber">{hopefuls.length}<small>/{slots}</small></b><small>駐車場希望</small></span>
-        <span className="stat"><b className="blue">{event.parking.limit}</b><small>上限台数</small></span>
+        <span className="stat"><b className="blue">{slots}</b><small>抽選枠</small></span>
       </div>
 
-      {confirmedMembers.length > 0 && (
+      {reserved > 0 && (
         <div className="lock-card">
-          <p className="lock-title">🔒 確定枠 {confirmedMembers.length}台</p>
-          <ul className="member-chips">{confirmedMembers.map((m) => <li key={m.id}>#{m.num} {m.name}</li>)}</ul>
-          <p className="muted">抽選枠: {slots}台</p>
+          <p className="lock-title">🔒 抽選外枠 {reserved}台（審判など）</p>
+          {confirmedMembers.length > 0 && <ul className="member-chips">{confirmedMembers.map((m) => <li key={m.id}>#{m.num} {m.name}</li>)}</ul>}
+          <p className="muted">合計 {event.parking.limit}台のうち、抽選するのは {slots}台です。抽選外枠を誰が使うかは審判の方で決めます。</p>
         </div>
       )}
 

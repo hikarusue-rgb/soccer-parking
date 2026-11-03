@@ -53,6 +53,7 @@ function gradeRules(root: string, coach: string) {
         parking: {
           mode: { ".validate": "newData.isString() && newData.val().matches(/^(none|lottery)$/)" },
           limit: { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 50" },
+          reserved: { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 50" },
           deadlineAt: { ".validate": "newData.isNumber()" },
         },
       },

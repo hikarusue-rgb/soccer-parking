@@ -82,6 +82,7 @@ export function toEvent(id: string, value: unknown): TeamEvent {
       mode: parking.mode === "lottery" ? "lottery" : "none",
       limit: num(parking.limit),
       deadlineAt: typeof parking.deadlineAt === "number" ? parking.deadlineAt : null,
+      reserved: num(parking.reserved),
       confirmed: strings(parking.confirmed),
     },
     version: num(e.version, 1),

@@ -102,7 +102,7 @@ describe("読み込んだデータの補正", () => {
     expect(e.kind).toBe("practice");
     expect(e.title).toBe("（予定名なし）");
     expect(e.start).toBeNull();
-    expect(e.parking).toEqual({ mode: "none", limit: 0, deadlineAt: null, confirmed: [] });
+    expect(e.parking).toEqual({ mode: "none", limit: 0, reserved: 0, deadlineAt: null, confirmed: [] });
     expect(e.attachments.map((a) => a.id)).toEqual(["b"]);
   });
   it("抽選結果の補正", () => {

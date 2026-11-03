@@ -18,19 +18,17 @@ export function DocsView() {
   const past = withDocs.filter((e) => e.date < today).reverse();
   const open = (e: TeamEvent) => t.navigate({ name: "event", id: e.id, section: "docs", from: "tournaments" });
 
-  // コーチ：要項がまだの、これからの試合・イベント（練習は後ろへ）
+  // コーチ：要項がまだの、これからの試合
   const missing = t.coach
     ? t.data.events
-        .filter((e) => e.date >= today && e.date <= addDays(today, 60) && e.kind !== "notice" && e.status !== "canceled" && !hasDocs(e))
-        .sort((a, b) => Number(a.kind === "practice") - Number(b.kind === "practice") || a.date.localeCompare(b.date))
+        .filter((e) => e.date >= today && e.date <= addDays(today, 60) && e.kind === "match" && e.status !== "canceled" && !hasDocs(e))
     : [];
   const shownMissing = showAll ? missing : missing.slice(0, 4);
 
   const card = (e: TeamEvent) => {
-    const d = e.details;
     const images = e.attachments.filter((a) => a.type === "image");
     const pdfs = e.attachments.length - images.length;
-    const parts = [images.length > 0 && `🖼 画像${images.length}`, pdfs > 0 && `📑 PDF${pdfs}`, Boolean(d.referee || d.venueNotes) && "📝 注意事項"].filter(Boolean);
+    const parts = [images.length > 0 && `🖼 画像${images.length}`, pdfs > 0 && `📑 PDF${pdfs}`].filter(Boolean);
     return (
       <button key={e.id} className={`doc-card ${t.updateState(e) === "unread" ? "is-updated" : t.updateState(e) === "recent" ? "is-recent" : ""}`} onClick={() => open(e)}>
         <span className="doc-card-head">
@@ -38,7 +36,6 @@ export function DocsView() {
           <EventBadges event={e} />
         </span>
         <b className="doc-title">{e.title}</b>
-        {d.format && <span className="doc-line"><span>試合形式</span>{d.format}</span>}
         {images.length > 0 && (
           <span className="doc-thumbs">
             {images.slice(0, images.length > 3 ? 2 : 3).map((a) => <img key={a.id} src={a.url} alt="" loading="lazy" />)}

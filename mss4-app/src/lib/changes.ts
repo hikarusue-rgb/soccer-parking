@@ -39,9 +39,9 @@ export interface HistoryItem { id: string; at: number; version: number; actor: s
 const uniformText = (u: { top: string; bottom: string; socks: string }) =>
   u.top || u.bottom || u.socks ? `上 ${u.top || "未確認"}／下 ${u.bottom || "未確認"}／靴下 ${u.socks || "未確認"}` : "";
 
-function parkingText(mode: string, limit: number, deadlineAt: number | null, confirmed: number): string {
+function parkingText(mode: string, limit: number, deadlineAt: number | null, reserved: number): string {
   if (mode !== "lottery") return "抽選なし";
-  return `抽選あり・${limit}台${deadlineAt ? `・締切 ${dateTimeLabel(deadlineAt)}` : ""}${confirmed ? `・確定枠 ${confirmed}台` : ""}`;
+  return `抽選枠 ${Math.max(0, limit - reserved)}台${reserved ? `・抽選外枠 ${reserved}台` : ""}${deadlineAt ? `・締切 ${dateTimeLabel(deadlineAt)}` : ""}`;
 }
 
 export function snapshotOfEvent(e: TeamEvent): EventSnapshot {
@@ -52,7 +52,7 @@ export function snapshotOfEvent(e: TeamEvent): EventSnapshot {
     equipment: e.equipmentConfirmed ? e.equipment.join("・") || "指定なし" : "",
     messages: e.messages.join("\n"), note: e.note,
     format: e.details.format, referee: e.details.referee, venueNotes: e.details.venueNotes,
-    parking: parkingText(e.parking.mode, e.parking.limit, e.parking.deadlineAt, e.parking.confirmed.length),
+    parking: parkingText(e.parking.mode, e.parking.limit, e.parking.deadlineAt, Math.max(e.parking.reserved, e.parking.confirmed.length)),
     files: e.attachments.map((a) => a.label).join("、"),
     hpNote: hpNoteOf(e.hp),
   };
@@ -68,7 +68,7 @@ export function snapshotOfDraft(d: EventDraft): EventSnapshot {
     equipment: d.equipmentConfirmed ? d.equipment.join("・") || "指定なし" : "",
     messages: d.messages.join("\n"), note: d.note.trim(),
     format: d.details.format.trim(), referee: d.details.referee.trim(), venueNotes: d.details.venueNotes.trim(),
-    parking: parkingText(d.parkingMode, d.parkingLimit, d.deadline ? localInputToMs(d.deadline) : null, d.confirmed.length),
+    parking: parkingText(d.parkingMode, d.parkingLimit, d.deadline ? localInputToMs(d.deadline) : null, Math.max(d.reserved, d.confirmed.length)),
     files: d.attachments.map((a) => a.label).join("、"),
     hpNote: hpNoteOf(d.hp),
   };

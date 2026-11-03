@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Minus, Plus, Save, Trash2, X } from "lucide-react";
-import { jstToday } from "../lib/datetime";
-import {
-  EQUIPMENT_CHOICES, MESSAGE_CHOICES, TIME_PRESETS, TITLE_PRESETS, autoDeadline, validateDraft, type EventDraft,
-} from "../lib/eventForm";
+import { MESSAGE_CHOICES, TIME_PRESETS, TITLE_PRESETS, autoDeadline, validateDraft, type EventDraft } from "../lib/eventForm";
 import { snapshotOfDraft, snapshotOfEvent } from "../lib/changes";
-import { parseLineMessage } from "../lib/lineParser";
 import { SaveError, deleteEvent, saveEvent } from "../lib/mutations";
 import { useTeam } from "../lib/teamContext";
 import { deleteFiles } from "../lib/uploads";
-import { KIND_LABELS, STATUS_LABELS, type EventKind, type EventStatus } from "../lib/types";
+import type { EventKind } from "../lib/types";
 import { FileUploader } from "./FileUploader";
 import { Chip, Field, Group, Segmented } from "./FormBits";
 
@@ -20,17 +16,22 @@ interface Props {
   onDeleted?: () => void;
 }
 
-const KINDS = (Object.keys(KIND_LABELS) as EventKind[]).map((value) => ({ value, label: KIND_LABELS[value] }));
-const STATUSES = Object.keys(STATUS_LABELS) as EventStatus[];
+/** 追加・編集できる種別は練習と試合だけ（2026-11-03 ユーザー指定。「連絡・休み」は選べない） */
+const KINDS: { value: EventKind; label: string }[] = [
+  { value: "practice", label: "練習" },
+  { value: "match", label: "試合" },
+];
 
-/** コーチの予定・試合の追加と編集（旧駐車場アプリと同じく、試合ごとに駐車場台数・締切・要項を入れる） */
+/**
+ * 予定の追加・編集
+ *  練習：日付・時間（開始〜終了）・場所・備考だけ
+ *  試合：日付・タイトル・対戦相手・会場・時間・駐車場（抽選枠／抽選外枠・締切）・ユニフォーム・要項（資料）・備考
+ */
 export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
   const t = useTeam();
   const [d, setD] = useState<EventDraft>(initial);
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [lineText, setLineText] = useState("");
-  const [lineResult, setLineResult] = useState<string | null>(null);
   /** この編集中に新しくアップロードしたファイル（保存せずに閉じたら削除する） */
   const [uploaded, setUploaded] = useState<string[]>([]);
   const errorRef = useRef<HTMLUListElement>(null);
@@ -39,9 +40,9 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
   const drawn = Boolean(d.id && t.data.lotteries[d.id]);
   const dirty = JSON.stringify(d) !== JSON.stringify(initial);
   const isMatch = d.kind === "match";
-  const isNotice = d.kind === "notice";
   const set = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => setD((prev) => ({ ...prev, [key]: value }));
   const toggle = (list: string[], value: string) => (list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
+  const lotteryCount = Math.max(0, d.parkingLimit - d.reserved);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -65,7 +66,6 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
       ...prev,
       kind,
       title: !prev.title || TITLE_PRESETS[prev.kind].includes(prev.title) ? TITLE_PRESETS[kind][0] : prev.title,
-      ...(kind === "notice" ? { parkingMode: "none" as const, parkingLimit: 0 } : {}),
     }));
   }
 
@@ -78,44 +78,27 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
     }));
   }
 
-  /** 駐車場台数（0なら抽選なし）。台数を入れたら締切を自動で入れる */
-  function changeLimit(value: number) {
-    const limit = Number.isFinite(value) ? Math.max(0, Math.min(50, Math.round(value))) : 0;
+  /** 抽選枠・抽選外枠の台数（合計が駐車可能台数）。抽選枠が0なら駐車場の抽選なし */
+  function changeParking(lottery: number, reserved: number) {
+    const lot = Math.max(0, Math.min(50, Math.round(lottery) || 0));
+    const res = lot > 0 ? Math.max(0, Math.min(50 - lot, Math.round(reserved) || 0)) : 0;
+    const limit = lot + res;
     setD((prev) => ({
       ...prev,
       parkingLimit: limit,
-      parkingMode: limit > 0 ? "lottery" : "none",
-      deadline: limit > 0 && !prev.deadline ? autoDeadline(prev.date) : prev.deadline,
-      confirmed: limit > 0 ? prev.confirmed : [],
+      reserved: res,
+      parkingMode: lot > 0 ? "lottery" : "none",
+      deadline: lot > 0 && !prev.deadline ? autoDeadline(prev.date) : prev.deadline,
+      confirmed: lot > 0 ? prev.confirmed : [],
     }));
   }
 
-  function applyLine() {
-    const p = parseLineMessage(lineText, jstToday(t.now));
-    const filled: string[] = [];
-    const next: EventDraft = { ...d, uniform: { ...d.uniform } };
-    if (p.date) { next.date = p.date; filled.push("日付"); }
-    if (p.title) { next.title = p.title; filled.push("予定名"); }
-    if (p.opponent) { next.opponent = p.opponent; filled.push("対戦相手"); }
-    if (p.venue) { next.venue = p.venue; filled.push("会場"); }
-    if (p.meeting) { next.meeting = p.meeting; filled.push("集合"); }
-    if (p.kickoff) { next.kickoff = p.kickoff; filled.push("キックオフ"); }
-    if (p.end) { next.end = p.end; filled.push("終了"); }
-    if (p.uniformTop || p.uniformBottom || p.uniformSocks) {
-      next.uniform = { top: p.uniformTop ?? next.uniform.top, bottom: p.uniformBottom ?? next.uniform.bottom, socks: p.uniformSocks ?? next.uniform.socks };
-      filled.push("ユニフォーム");
-    }
-    if (p.note) { next.note = next.note ? `${next.note}\n\n${p.note}` : p.note; filled.push("備考（スケジュール）"); }
-    if (p.opponent || p.kickoff) next.kind = "match";
-    if (next.parkingLimit > 0 && next.date !== d.date && (!d.deadline || d.deadline === autoDeadline(d.date))) next.deadline = autoDeadline(next.date);
-    setD(next);
-    setLineResult(filled.length ? `読み取って入力した項目：${filled.join("・")}。内容を確認してください。` : "読み取れる項目がありませんでした。");
-  }
-
   async function save() {
-    const problems = validateDraft(d);
+    // 練習では駐車場・ユニフォーム・資料を使わない（以前に入れた資料は残す）
+    const draft: EventDraft = isMatch ? d : { ...d, meeting: "", kickoff: "", opponent: "" };
+    const problems = validateDraft(draft);
     if (existing && existing.version !== d.version) {
-      problems.unshift("ほかのコーチがこの予定を先に更新しました。いったん閉じて、最新の内容を確認してから編集し直してください。");
+      problems.unshift("ほかの人がこの予定を先に更新しました。いったん閉じて、最新の内容を確認してから編集し直してください。");
     }
     if (problems.length) {
       setErrors(problems);
@@ -125,9 +108,9 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
     setBusy(true);
     setErrors([]);
     try {
-      const id = await saveEvent(t.grade, d, { before: existing ? snapshotOfEvent(existing) : null, after: snapshotOfDraft(d) });
+      const id = await saveEvent(t.grade, draft, { before: existing ? snapshotOfEvent(existing) : null, after: snapshotOfDraft(draft) });
       // 外した資料と、アップロードしたが保存しなかった資料の実体を消す
-      const kept = new Set(d.attachments.map((a) => a.path));
+      const kept = new Set(draft.attachments.map((a) => a.path));
       void deleteFiles([...initial.attachments.map((a) => a.path), ...uploaded].filter((p) => !kept.has(p)));
       onSaved(id);
     } catch (error) {
@@ -151,53 +134,59 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
   }
 
   const venues = [...new Set([...t.data.settings.venues, d.venue].filter(Boolean))].slice(0, 14);
-  const members = t.data.members.filter((m) => m.active || d.confirmed.includes(m.id));
   const colors = t.data.settings.uniformColors;
+  const what = isMatch ? "試合" : "練習";
 
   return (
     <div className="editor-backdrop" role="presentation">
       <div className="editor" role="dialog" aria-modal="true" aria-labelledby="editor-title">
         <header className="editor-head">
-          <h2 id="editor-title">{d.id ? (isMatch ? "試合を編集" : "予定を編集") : isMatch ? "試合を追加" : "予定を追加"}</h2>
+          <h2 id="editor-title">{d.id ? `${what}を編集` : `${what}を追加`}</h2>
           <button className="icon-btn" aria-label="閉じる" onClick={close}><X size={20} /></button>
         </header>
 
         <div className="editor-body">
-          {!d.id && (
-            <details className="line-import">
-              <summary>LINEの文面から入力する</summary>
-              <textarea className="input" rows={5} value={lineText} onChange={(e) => setLineText(e.target.value)} placeholder="試合連絡の文面を貼り付けてください" aria-label="LINEの文面" />
-              <button type="button" className="btn btn-small" onClick={applyLine} disabled={!lineText.trim()}>読み取って入力</button>
-              {lineResult && <p className="field-hint" role="status">{lineResult}</p>}
-            </details>
-          )}
-
           <Group label="種別">
-            <Segmented label="種別" value={d.kind} options={KINDS} onChange={changeKind} />
+            <Segmented label="種別" value={d.kind === "notice" ? "" : d.kind} options={KINDS} onChange={changeKind} />
           </Group>
 
-          <Field label={isMatch ? "試合日" : "日付"}>
+          <Field label={isMatch ? "試合日" : "日にち"}>
             {(id) => <input id={id} className="input" type="date" value={d.date} onChange={(e) => changeDate(e.target.value)} required />}
           </Field>
 
-          <Field label={isMatch ? "タイトル" : "予定名"}>
-            {(id) => (
-              <>
-                <div className="chips">
-                  {TITLE_PRESETS[d.kind].map((title) => <Chip key={title} pressed={d.title === title} onClick={() => set("title", title)}>{title}</Chip>)}
-                </div>
-                <input id={id} className="input" value={d.title} maxLength={100} onChange={(e) => set("title", e.target.value)} placeholder="例: プレミアリーグ vs ○○FC" />
-              </>
-            )}
-          </Field>
-
           {isMatch && (
-            <Field label="🆚 対戦相手">
-              {(id) => <input id={id} className="input" value={d.opponent} maxLength={60} onChange={(e) => set("opponent", e.target.value)} placeholder="例: ○○FC（複数なら「、」区切り）" />}
-            </Field>
+            <>
+              <Field label="タイトル">
+                {(id) => (
+                  <>
+                    <div className="chips">
+                      {TITLE_PRESETS.match.map((title) => <Chip key={title} pressed={d.title === title} onClick={() => set("title", title)}>{title}</Chip>)}
+                    </div>
+                    <input id={id} className="input" value={d.title} maxLength={100} onChange={(e) => set("title", e.target.value)} placeholder="例: プレミアリーグ" />
+                  </>
+                )}
+              </Field>
+              <Field label="🆚 対戦相手">
+                {(id) => <input id={id} className="input" value={d.opponent} maxLength={60} onChange={(e) => set("opponent", e.target.value)} placeholder="例: ○○FC（複数なら「、」区切り）" />}
+              </Field>
+            </>
           )}
 
-          <Field label="📍 会場">
+          <Group label="⏰ 時間" hint="未定の時刻は空欄のままにしてください。">
+            <div className="chips">
+              {TIME_PRESETS[isMatch ? "match" : "practice"].map(([s, e]) => (
+                <Chip key={s + e} pressed={d.start === s && d.end === e} onClick={() => setD((prev) => ({ ...prev, start: s, end: e }))}>{s}–{e}</Chip>
+              ))}
+            </div>
+            <div className="time-grid">
+              {isMatch && <TimeInput label="集合" value={d.meeting} onChange={(v) => set("meeting", v)} />}
+              {isMatch && <TimeInput label="キックオフ" value={d.kickoff} onChange={(v) => set("kickoff", v)} />}
+              <TimeInput label="開始" value={d.start} onChange={(v) => set("start", v)} />
+              <TimeInput label="終了" value={d.end} onChange={(v) => set("end", v)} />
+            </div>
+          </Group>
+
+          <Field label={isMatch ? "📍 会場" : "📍 場所"}>
             {(id) => (
               <>
                 <div className="chips">
@@ -208,37 +197,16 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
             )}
           </Field>
 
-          <Group label="⏰ 時間" hint="未定の時刻は空欄のままにしてください。">
-            {TIME_PRESETS[d.kind].length > 0 && (
-              <div className="chips">
-                {TIME_PRESETS[d.kind].map(([s, e]) => (
-                  <Chip key={s + e} pressed={d.start === s && d.end === e} onClick={() => setD((prev) => ({ ...prev, start: s, end: e }))}>{s}–{e}</Chip>
-                ))}
-              </div>
-            )}
-            <div className="time-grid">
-              {!isNotice && <TimeInput label="集合" value={d.meeting} onChange={(v) => set("meeting", v)} />}
-              {isMatch && <TimeInput label="キックオフ" value={d.kickoff} onChange={(v) => set("kickoff", v)} />}
-              <TimeInput label="開始" value={d.start} onChange={(v) => set("start", v)} />
-              <TimeInput label="終了" value={d.end} onChange={(v) => set("end", v)} />
-            </div>
-          </Group>
-
-          {!isNotice && (
+          {isMatch && (
             <section className="editor-section" aria-labelledby="parking-title">
               <h3 id="parking-title">🚗 駐車場</h3>
-              <Field label="駐車場台数（停められる台数）" hint="0台のときは駐車場の抽選をしません。台数を入れると、保護者がこの試合の画面から車出しを申し込めます。">
-                {(id) => (
-                  <div className="stepper">
-                    <button type="button" className="icon-btn" aria-label="1台減らす" onClick={() => changeLimit(d.parkingLimit - 1)}><Minus size={18} /></button>
-                    <input id={id} className="input stepper-input" type="number" inputMode="numeric" min={0} max={50} value={d.parkingLimit} onChange={(e) => changeLimit(Number.parseInt(e.target.value || "0", 10))} />
-                    <span className="stepper-unit">台</span>
-                    <button type="button" className="icon-btn" aria-label="1台増やす" onClick={() => changeLimit(d.parkingLimit + 1)}><Plus size={18} /></button>
-                  </div>
-                )}
-              </Field>
-              {d.parkingLimit > 0 && (
+              <div className="parking-split">
+                <Stepper label="抽選枠" hint="保護者の申し込みから抽選する台数。0台なら抽選なし" value={lotteryCount} onChange={(v) => changeParking(v, d.reserved)} />
+                <Stepper label="抽選外枠" hint="審判・コーチなど抽選しない台数（誰が使うかは審判の方で決めます）" value={d.reserved} disabled={lotteryCount === 0} onChange={(v) => changeParking(lotteryCount, v)} />
+              </div>
+              {lotteryCount > 0 && (
                 <>
+                  <p className="parking-total">合計 <b>{d.parkingLimit}</b> 台（抽選枠 {lotteryCount}台{d.reserved ? `・抽選外枠 ${d.reserved}台` : ""}）</p>
                   <Field label="回答締切" hint="空欄にすると締切なしになります。">
                     {(id) => (
                       <div className="inline-row">
@@ -247,20 +215,13 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
                       </div>
                     )}
                   </Field>
-                  <Group label="🔒 確定枠（抽選しない車）" hint="コーチの車・用具運搬など。駐車場台数のうち、この台数は抽選の対象外になります。">
-                    <div className="chips">
-                      {members.map((m) => (
-                        <Chip key={m.id} pressed={d.confirmed.includes(m.id)} onClick={() => set("confirmed", toggle(d.confirmed, m.id))}>#{m.num} {m.name}</Chip>
-                      ))}
-                    </div>
-                  </Group>
                   {drawn && <p className="alert alert-warn">この試合はすでに抽選済みです。台数を変えた場合は、試合の画面で再抽選してください。</p>}
                 </>
               )}
             </section>
           )}
 
-          {!isNotice && (
+          {isMatch && (
             <section className="editor-section" aria-labelledby="yokou-title">
               <h3 id="yokou-title">📋 要項</h3>
               <Group label="👕 ユニフォーム">
@@ -276,61 +237,24 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
                   ))}
                 </div>
               </Group>
-              <Field label="試合形式">
-                {(id) => <input id={id} className="input" value={d.details.format} maxLength={200} onChange={(e) => set("details", { ...d.details, format: e.target.value })} placeholder="例: 8人制 15分ハーフ" />}
-              </Field>
-              <Field label="審判割当">
-                {(id) => <textarea id={id} className="input" rows={2} value={d.details.referee} maxLength={500} onChange={(e) => set("details", { ...d.details, referee: e.target.value })} placeholder="例: 第2試合 主審・副審 MSS" />}
-              </Field>
-              <Field label="会場・駐車の注意事項">
-                {(id) => <textarea id={id} className="input" rows={3} value={d.details.venueNotes} maxLength={1000} onChange={(e) => set("details", { ...d.details, venueNotes: e.target.value })} placeholder="例: 正門側は駐車禁止。保護者の観戦は○○側から" />}
-              </Field>
               <Group label="📄 要項・当日資料（画像・PDF）">
                 <FileUploader attachments={d.attachments} onChange={(a) => set("attachments", a)} onUploaded={(path) => setUploaded((u) => [...u, path])} />
               </Group>
             </section>
           )}
 
-          {isNotice && (
-            <Group label="📄 資料（画像・PDF）">
-              <FileUploader attachments={d.attachments} onChange={(a) => set("attachments", a)} onUploaded={(path) => setUploaded((u) => [...u, path])} />
-            </Group>
-          )}
-
-          <Group label="📝 備考・チームからの連絡">
+          <Group label="📝 備考">
             <div className="chips">
               {[...new Set([...MESSAGE_CHOICES, ...d.messages])].map((m) => (
                 <Chip key={m} pressed={d.messages.includes(m)} onClick={() => set("messages", toggle(d.messages, m))}>{m}</Chip>
               ))}
             </div>
-            <textarea className="input" rows={3} value={d.note} maxLength={2000} onChange={(e) => set("note", e.target.value)} placeholder="備考（自由記述。例: サブ・ビブス持参）" aria-label="備考" />
+            <textarea className="input" rows={3} value={d.note} maxLength={2000} onChange={(e) => set("note", e.target.value)} aria-label="備考" />
           </Group>
-
-          {!isNotice && (
-            <Group label="持ち物">
-              <div className="chips">
-                {[...new Set([...EQUIPMENT_CHOICES, ...d.equipment])].map((item) => (
-                  <Chip key={item} pressed={d.equipment.includes(item)} onClick={() => set("equipment", toggle(d.equipment, item))}>{item}</Chip>
-                ))}
-              </div>
-              <label className="check-line">
-                <input type="checkbox" checked={d.equipmentConfirmed} onChange={(e) => set("equipmentConfirmed", e.target.checked)} />
-                持ち物を確認済みとして表示する
-              </label>
-            </Group>
-          )}
-
-          <Field label="開催状況">
-            {(id) => (
-              <select id={id} className="input" value={d.status} onChange={(e) => set("status", e.target.value as EventStatus)}>
-                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-              </select>
-            )}
-          </Field>
 
           {existing && (
             <section className="editor-danger">
-              <button type="button" className="btn btn-danger" onClick={remove} disabled={busy}><Trash2 size={16} aria-hidden="true" />この{isMatch ? "試合" : "予定"}を削除</button>
+              <button type="button" className="btn btn-danger" onClick={remove} disabled={busy}><Trash2 size={16} aria-hidden="true" />この{what}を削除</button>
             </section>
           )}
         </div>
@@ -350,6 +274,21 @@ export function EventEditor({ initial, onClose, onSaved, onDeleted }: Props) {
         </footer>
       </div>
     </div>
+  );
+}
+
+function Stepper({ label, hint, value, disabled, onChange }: { label: string; hint: string; value: number; disabled?: boolean; onChange: (v: number) => void }) {
+  return (
+    <Field label={label} hint={hint}>
+      {(id) => (
+        <div className="stepper">
+          <button type="button" className="icon-btn" aria-label={`${label}を1台減らす`} disabled={disabled || value <= 0} onClick={() => onChange(value - 1)}><Minus size={18} /></button>
+          <input id={id} className="input stepper-input" type="number" inputMode="numeric" min={0} max={50} value={value} disabled={disabled} onChange={(e) => onChange(Number.parseInt(e.target.value || "0", 10))} />
+          <span className="stepper-unit">台</span>
+          <button type="button" className="icon-btn" aria-label={`${label}を1台増やす`} disabled={disabled} onClick={() => onChange(value + 1)}><Plus size={18} /></button>
+        </div>
+      )}
+    </Field>
   );
 }
 

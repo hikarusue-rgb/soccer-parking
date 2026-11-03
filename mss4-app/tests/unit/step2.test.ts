@@ -18,14 +18,16 @@ describe("編集フォーム", () => {
     expect(autoDeadline("2026-03-01")).toBe("2026-02-27T17:00");
     expect(autoDeadline("")).toBe("");
   });
-  it("時刻の前後関係・台数・確定枠を検査する", () => {
+  it("時刻の前後関係・台数・抽選外枠を検査する", () => {
     const d = { ...blankDraft("2026-11-07"), start: "12:00", end: "11:00", meeting: "10:00", kickoff: "09:30" };
     expect(validateDraft(d)).toEqual(expect.arrayContaining([
       "終了は開始より後の時刻にしてください。",
       "集合はキックオフ・開始より前の時刻にしてください。",
     ]));
     const lottery = { ...blankDraft("2026-11-07"), parkingMode: "lottery" as const, parkingLimit: 1, confirmed: ["a", "b"] };
-    expect(validateDraft(lottery)).toContain("確定枠が駐車可能台数を超えています。");
+    expect(validateDraft(lottery)).toContain("抽選外枠が合計台数を超えています。");
+    expect(validateDraft({ ...blankDraft("2026-11-07"), parkingMode: "lottery" as const, parkingLimit: 3, reserved: 4 })).toContain("抽選外枠が合計台数を超えています。");
+    expect(validateDraft({ ...blankDraft("2026-11-07"), parkingMode: "lottery" as const, parkingLimit: 5, reserved: 2 })).toEqual([]);
     expect(validateDraft(blankDraft("2026-11-07"))).toEqual([]);
   });
   it("保存形：版を1つ上げ、空欄は保存せず、値のない項目を含めない", () => {
@@ -34,7 +36,8 @@ describe("編集フォーム", () => {
     expect(stored).not.toHaveProperty("meeting");
     expect(stored).not.toHaveProperty("opponent");
     expect(stored.legacy).toEqual({ calendarId: "initial-20261024-13" });
-    expect(stored.parking).toEqual({ mode: "lottery", limit: 3, deadlineAt: Date.parse("2026-11-05T08:00:00Z"), confirmed: ["m9"] });
+    // 以前の確定枠（1名）は、抽選外枠1台として保存する
+    expect(stored.parking).toEqual({ mode: "lottery", limit: 3, reserved: 1, deadlineAt: Date.parse("2026-11-05T08:00:00Z"), confirmed: ["m9"] });
     const noneDraft = { ...draftFromEvent(base), parkingMode: "none" as const };
     expect(toStoredEvent(noneDraft).parking).toEqual({ mode: "none", limit: 0 });
     const json = JSON.stringify(stored, (_k, v) => (v === undefined ? "__undefined__" : v));
@@ -99,5 +102,15 @@ describe("駐車場の状態", () => {
     const lottery = { status: "drawn" as const, policy: "random" as const, slots: 2, participants: ["m1"], winners: ["m1"], rounds: [], conductedAt: 1, updatedAt: 1 };
     expect(parkingSummary(base, entries, lottery, after)).toMatchObject({ phase: "drawn", label: "🚗 配車確定" });
     expect(parkingSummary(toEvent("x", { date: "2026-11-07" }), entries, undefined, before)).toBeNull();
+  });
+});
+
+describe("抽選枠と抽選外枠", () => {
+  it("抽選する台数は合計から抽選外枠を引いた数（以前の確定枠の人数も抽選外枠として数える）", async () => {
+    const { lotterySlots, reservedOf } = await import("../../src/lib/lottery.ts");
+    const ev = (parking: Record<string, unknown>) => ({ parking: { mode: "lottery", deadlineAt: null, confirmed: [], reserved: 0, ...parking } }) as never;
+    expect(lotterySlots(ev({ limit: 5, reserved: 2 }))).toBe(3);
+    expect(reservedOf(ev({ limit: 4, confirmed: ["a", "b"] }))).toBe(2);
+    expect(lotterySlots(ev({ limit: 4, reserved: 1, confirmed: ["a", "b"] }))).toBe(2);
   });
 });

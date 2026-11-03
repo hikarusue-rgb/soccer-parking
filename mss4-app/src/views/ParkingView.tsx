@@ -19,9 +19,9 @@ export function ParkingView() {
   const open = (e: TeamEvent) => t.navigate({ name: "event", id: e.id, section: "parking", from: "parking" });
   const cards = (items: TeamEvent[]) => items.map((e) => <MatchCard key={e.id} event={e} onOpen={() => open(e)} />);
 
-  // コーチ：まだ駐車場を設定していない、これからの予定（試合・練習・イベント）
+  // コーチ：まだ駐車場を設定していない、これからの試合
   const unset = t.coach
-    ? t.data.events.filter((e) => e.date >= today && e.date <= addDays(today, 60) && e.kind !== "notice" && e.status !== "canceled" && !hasParking(e))
+    ? t.data.events.filter((e) => e.date >= today && e.date <= addDays(today, 60) && e.kind === "match" && e.status !== "canceled" && !hasParking(e))
     : [];
   const shownUnset = showAll ? unset : unset.slice(0, 4);
   const nothing = !g.thisWeek.items.length && !g.nextWeek.items.length && !g.others.length;

@@ -14,7 +14,8 @@ export const TIME_PRESETS: Record<EventKind, [string, string][]> = {
   notice: [],
 };
 export const EQUIPMENT_CHOICES = ["ボール", "水筒", "すね当て", "タオル", "帽子", "着替え", "ユニフォーム（正）", "ユニフォーム（副）", "サブ・ビブス", "お弁当"];
-export const MESSAGE_CHOICES = ["雨天時は改めて連絡します", "集合時刻を確認してください", "ユニフォームは正・副を持参してください", "現地集合・現地解散です"];
+/** 備考の定型文（2026-11-03 ユーザー指定） */
+export const MESSAGE_CHOICES = ["サブ・ビブス・着替え持参"];
 
 export interface EventDraft {
   id: string | null;
@@ -41,6 +42,9 @@ export interface EventDraft {
   parkingLimit: number;
   /** <input type="datetime-local"> の値（日本時間）。空は締切なし */
   deadline: string;
+  /** 抽選外枠の台数（parkingLimit に含む） */
+  reserved: number;
+  /** 以前の確定枠（過去の予定の表示用。編集では変えない） */
   confirmed: string[];
   attachments: Attachment[];
   createdAt: number | null;
@@ -59,7 +63,7 @@ export function blankDraft(date: string): EventDraft {
     start: "", end: "", meeting: "", kickoff: "", venue: "", opponent: "",
     uniform: { top: "", bottom: "", socks: "" }, equipment: [], equipmentConfirmed: false, messages: [], note: "",
     tournamentId: "", details: { format: "", referee: "", venueNotes: "" },
-    parkingMode: "none", parkingLimit: 0, deadline: "", confirmed: [], attachments: [], createdAt: null, legacy: null, hp: null,
+    parkingMode: "none", parkingLimit: 0, deadline: "", reserved: 0, confirmed: [], attachments: [], createdAt: null, legacy: null, hp: null,
   };
 }
 
@@ -75,6 +79,7 @@ export function draftFromEvent(e: TeamEvent, options: { duplicate?: boolean } = 
     tournamentId: e.tournamentId ?? "", details: { ...e.details },
     parkingMode: e.parking.mode === "lottery" && e.parking.limit > 0 ? "lottery" : "none", parkingLimit: e.parking.mode === "lottery" ? e.parking.limit : 0,
     deadline: e.parking.deadlineAt ? msToLocalInput(e.parking.deadlineAt) : "",
+    reserved: e.parking.mode === "lottery" ? Math.max(e.parking.reserved, dup ? 0 : e.parking.confirmed.length) : 0,
     confirmed: dup ? [] : [...e.parking.confirmed],
     // 複製では資料（ファイル）は引き継がない
     attachments: dup ? [] : e.attachments,
@@ -100,7 +105,8 @@ export function validateDraft(d: EventDraft): string[] {
   if (d.parkingMode === "lottery") {
     if (!Number.isInteger(d.parkingLimit) || d.parkingLimit < 1 || d.parkingLimit > 50) errors.push("駐車可能台数は1〜50台で入力してください。");
     if (d.deadline && localInputToMs(d.deadline) === null) errors.push("応募締切の日時を確認してください。");
-    if (d.confirmed.length > d.parkingLimit) errors.push("確定枠が駐車可能台数を超えています。");
+    if (!Number.isInteger(d.reserved) || d.reserved < 0) errors.push("抽選外枠の台数を確認してください。");
+    else if (Math.max(d.reserved, d.confirmed.length) > d.parkingLimit) errors.push("抽選外枠が合計台数を超えています。");
   }
   return errors;
 }
@@ -138,7 +144,7 @@ export function toStoredEvent(d: EventDraft): Record<string, unknown> {
       d.attachments.length > 0,
     ),
     parking: d.parkingMode === "lottery"
-      ? { mode: "lottery", limit: d.parkingLimit, ...(deadlineAt ? { deadlineAt } : {}), ...(d.confirmed.length ? { confirmed: d.confirmed } : {}) }
+      ? { mode: "lottery", limit: d.parkingLimit, ...(d.reserved ? { reserved: d.reserved } : {}), ...(deadlineAt ? { deadlineAt } : {}), ...(d.confirmed.length ? { confirmed: d.confirmed } : {}) }
       : { mode: "none", limit: 0 },
     version: d.version + 1,
     createdAt: d.createdAt ?? serverTimestamp(),
