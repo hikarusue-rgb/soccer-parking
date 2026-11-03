@@ -1,6 +1,6 @@
 import { BellRing, Check, ChevronRight } from "lucide-react";
 import { dayLabel, relativeDay, jstToday } from "../lib/datetime";
-import { lotteryKey, SHARED_DAYS } from "../lib/seen";
+import { isInitialOnly, lotteryKey, SHARED_DAYS } from "../lib/seen";
 import { useTeam } from "../lib/teamContext";
 import { summarize, useHistories } from "../lib/updates";
 import type { HistoryItem } from "../lib/changes";
@@ -27,7 +27,7 @@ export function UpdatesPanel() {
     .map((e) => {
       const lottery = t.data.lotteries[e.id];
       const state = t.updateState(e);
-      const changedAt = e.updatedBy === "移行" && e.version <= 1 ? 0 : e.updatedAt;
+      const changedAt = isInitialOnly(e) ? 0 : e.updatedAt;
       const drawnAt = lottery?.updatedAt ?? 0;
       const drawnNew = t.isLotteryUnread(e);
       const drawn = drawnNew || drawnAt >= cutoff;

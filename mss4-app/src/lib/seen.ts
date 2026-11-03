@@ -46,9 +46,14 @@ export function baseline(data: Pick<TeamData, "events" | "lotteries">): Seen {
 export const SHARED_DAYS = 3;
 const SHARED = SHARED_DAYS * 86_400_000;
 
-/** 全員共通：直近3日以内に追加・変更された予定（移行しただけの予定は除く） */
+/** 移行・初期登録しただけの予定（まだ誰も変えていない）。「更新」として出さない */
+export function isInitialOnly(e: Pick<TeamEvent, "updatedBy" | "version">): boolean {
+  return (e.updatedBy === "移行" || e.updatedBy === "初期登録") && e.version <= 1;
+}
+
+/** 全員共通：直近3日以内に追加・変更された予定（移行・初期登録しただけの予定は除く） */
 export function isRecent(e: TeamEvent, now: number = Date.now()): boolean {
-  return e.updatedAt >= now - SHARED && !(e.updatedBy === "移行" && e.version <= 1);
+  return e.updatedAt >= now - SHARED && !isInitialOnly(e);
 }
 
 /** 全員共通：直近3日以内に出た抽選結果 */
@@ -60,7 +65,7 @@ export function isLotteryRecent(lottery: Lottery | undefined, now: number = Date
 export type UpdateState = "unread" | "recent" | null;
 
 export function isUnread(e: TeamEvent, seen: Seen, now: number = Date.now()): boolean {
-  return e.updatedAt >= now - RECENT && (seen[e.id] ?? 0) < e.version;
+  return !isInitialOnly(e) && e.updatedAt >= now - RECENT && (seen[e.id] ?? 0) < e.version;
 }
 
 export function isLotteryUnread(eventId: string, lottery: Lottery | undefined, seen: Seen, now: number = Date.now()): boolean {

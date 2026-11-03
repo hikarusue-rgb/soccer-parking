@@ -165,3 +165,16 @@ describe("最近の変更（全員共通）", () => {
     expect(isLotteryRecent({ updatedAt: now - 5 * day } as never, now)).toBe(false);
   });
 });
+
+describe("初期登録の予定", () => {
+  it("初期登録・移行しただけの予定は、最近の変更にも未確認にも出さない。その後に変えたら出す", async () => {
+    const { isRecent, isUnread } = await import("../../src/lib/seen.ts");
+    const now = Date.parse("2026-11-04T00:00:00Z");
+    const init = { id: "e1", updatedAt: now - 1000, updatedBy: "初期登録", version: 1 } as never;
+    expect(isRecent(init, now)).toBe(false);
+    expect(isUnread(init, {}, now)).toBe(false);
+    const changed = { id: "e1", updatedAt: now - 1000, updatedBy: "HP自動更新", version: 2 } as never;
+    expect(isRecent(changed, now)).toBe(true);
+    expect(isUnread(changed, { e1: 1 }, now)).toBe(true);
+  });
+});

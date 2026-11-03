@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { BellRing, History } from "lucide-react";
 import { loadHistory, type HistoryItem } from "../lib/changes";
 import { dateTimeLabel } from "../lib/datetime";
-import { SHARED_DAYS } from "../lib/seen";
+import { isInitialOnly, SHARED_DAYS } from "../lib/seen";
 import { useTeam } from "../lib/teamContext";
 import { summarize } from "../lib/updates";
 import type { TeamEvent } from "../lib/types";
@@ -18,7 +18,7 @@ export function ChangeHistory({ event, showLog = true }: { event: TeamEvent; sho
   // 画面を開いた時点で、この端末が見ていた版（この画面にいる間は固定）
   const [unreadAtOpen] = useState(() => t.isUnread(event));
   const [seenAtOpen] = useState(() => t.seen[event.id] ?? 0);
-  const recent = t.updateState(event) !== null && !(event.updatedBy === "移行" && event.version <= 1);
+  const recent = t.updateState(event) !== null && !isInitialOnly(event);
   const [items, setItems] = useState<HistoryItem[] | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
