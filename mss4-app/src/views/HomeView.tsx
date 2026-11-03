@@ -11,6 +11,7 @@ import { EventBadges } from "../components/EventBadges";
 import { EventEditor } from "../components/EventEditor";
 import { EventRow } from "../components/EventRow";
 import { UpdatesPanel } from "../components/UpdatesPanel";
+import { RosterEditor } from "../components/RosterEditor";
 import { MonthCalendar } from "../components/MonthCalendar";
 
 export function HomeView() {
@@ -20,6 +21,7 @@ export function HomeView() {
   const [view, setView] = useState<"month" | "list">("month");
   const [day, setDay] = useState<string | null>(null);
   const [editor, setEditor] = useState<EventDraft | null>(null);
+  const [showRoster, setShowRoster] = useState(false);
   const events = t.data.events;
 
   const upcoming = useMemo(() => events.filter((e) => e.date >= today && e.date <= addDays(today, 90)).slice(0, 3), [events, today]);
@@ -152,6 +154,13 @@ export function HomeView() {
           <small className="muted">iPhone・Googleカレンダーに取り込めます。取り込んだ予定は自動では更新されません。</small>
         </div>
       </section>
+
+      {t.coach && (
+        <section>
+          <button className="fold-btn" onClick={() => setShowRoster((v) => !v)} aria-expanded={showRoster}>👦 名簿の管理 {showRoster ? "▲" : "▼"}</button>
+          {showRoster && <div className="fold-body"><RosterEditor /></div>}
+        </section>
+      )}
 
       {editor && (
         <EventEditor

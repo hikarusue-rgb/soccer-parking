@@ -5,7 +5,6 @@ import { useTeam } from "../lib/teamContext";
 import type { TeamEvent } from "../lib/types";
 import { MatchCard } from "../components/MatchCard";
 import { QuickRow } from "../components/QuickRow";
-import { RosterEditor } from "../components/RosterEditor";
 
 /** 🚗 駐車場：抽選がある予定のカード（旧アプリと同じ今週・翌週・その他・過去）。タップでその予定の「駐車場」へ */
 export function ParkingView() {
@@ -14,7 +13,6 @@ export function ParkingView() {
   const g = groupMatches(t.data.events, today, hasParking);
   const [showOthers, setShowOthers] = useState(false);
   const [showPast, setShowPast] = useState(false);
-  const [showRoster, setShowRoster] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const open = (e: TeamEvent) => t.navigate({ name: "event", id: e.id, section: "parking", from: "parking" });
   const cards = (items: TeamEvent[]) => items.map((e) => <MatchCard key={e.id} event={e} onOpen={() => open(e)} />);
@@ -71,12 +69,6 @@ export function ParkingView() {
         </section>
       )}
 
-      {t.coach && (
-        <section>
-          <button className="fold-btn" onClick={() => setShowRoster((v) => !v)} aria-expanded={showRoster}>👦 名簿の管理（コーチ） {showRoster ? "▲" : "▼"}</button>
-          {showRoster && <div className="fold-body"><RosterEditor /></div>}
-        </section>
-      )}
     </>
   );
 }
