@@ -305,7 +305,7 @@ function EntryCard({ event, closed }: { event: TeamEvent; closed: boolean }) {
               <span className="muted">締切後は、辞退への変更だけできます</span>
               {entry.attending && entry.parkingNeeded && !isConfirmed && (
                 <button className="btn btn-small" disabled={busy}
-                  onClick={() => send({ attending: true, parkingNeeded: false, carpoolCapacity: 0 }, won ? "当選した駐車場を辞退します。よろしいですか？\n空いた枠はコーチが再抽選します。" : "駐車場の希望を取り下げます。よろしいですか？")}>
+                  onClick={() => send({ attending: true, parkingNeeded: false, carpoolCapacity: 0 }, won ? "当選した駐車場を辞退します。よろしいですか？\n空いた枠は自動で追加抽選します。" : "駐車場の希望を取り下げます。よろしいですか？")}>
                   🚶 駐車場を辞退する
                 </button>
               )}

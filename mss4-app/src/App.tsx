@@ -14,6 +14,7 @@ import { TabNav } from "./components/TabNav";
 import { HomeView } from "./views/HomeView";
 import { ParkingView } from "./views/ParkingView";
 import { DocsView } from "./views/DocsView";
+import { HelpView } from "./views/HelpView";
 import { EventDetailView } from "./views/EventDetailView";
 
 export default function App() {
@@ -56,12 +57,13 @@ function Shell({ grade, role }: { grade: GradeCode; role: Role }) {
     case "home": view = <HomeView />; break;
     case "parking": view = <ParkingView />; break;
     case "tournaments": view = <DocsView />; break;
+    case "help": view = <HelpView onBack={() => back({ name: "home" })} />; break;
     case "event": view = <EventDetailView key={route.id} id={route.id} section={route.section} from={route.from} onBack={() => back({ name: route.from ?? "home" })} />; break;
   }
 
   return (
     <div className="app">
-      <AppHeader grade={grade} role={role} onCoachLogin={() => setCoachLogin(true)} onChangePassphrase={() => setChangingPassphrase(true)} onLogout={() => void logOut()} />
+      <AppHeader grade={grade} role={role} onHelp={() => navigate({ name: "help" })} onCoachLogin={() => setCoachLogin(true)} onChangePassphrase={() => setChangingPassphrase(true)} onLogout={() => void logOut()} />
       <TabNav current={tabOf(route)} counts={counts} onSelect={(tab) => navigate({ name: tab })} />
       <main className="main" id="main">
         {TARGET === "emulator" && <p className="dev-banner">開発用（ローカルのテスト環境）</p>}

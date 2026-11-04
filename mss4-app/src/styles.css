@@ -814,3 +814,21 @@ body { background: var(--bg); }
 .share-actions { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
 .btn-line { background: #06c755; border-color: #06c755; color: #fff; }
 .btn-line:hover { background: #05b14c; }
+
+/* 使い方 */
+.help-link { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 4px 12px; border-radius: 999px; background: #ffffff1a; color: #fff; font-size: 13px; font-weight: 800; text-decoration: none; }
+.help-link:hover { background: #ffffff2e; }
+.help { display: grid; gap: 14px; }
+.help-card { display: grid; gap: 8px; background: #fff; border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); font-size: 14.5px; line-height: 1.7; }
+.help-card h2 { font-size: 17px; font-weight: 900; color: var(--navy); }
+.help-card h3 { font-size: 14.5px; font-weight: 900; margin-top: 6px; }
+.help-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.help-table th, .help-table td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }
+.help-table th { background: #f2f6f9; font-size: 12px; color: var(--muted); }
+.help-table td:first-child { font-weight: 800; white-space: nowrap; }
+.help-tabs { position: sticky; top: 0; z-index: 5; }
+@media (min-width: 768px) { .help-tabs { top: 58px; } }
+.help-steps { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; }
+.help-steps ol { margin: 4px 0; padding-left: 1.3em; }
+.help-faq { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; list-style: disc; }
+.help-note { display: block; margin-top: 4px; font-size: 13px; color: var(--alert-dark); font-weight: 700; }

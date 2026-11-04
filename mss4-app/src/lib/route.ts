@@ -5,6 +5,7 @@ export type TabName = "home" | "parking" | "tournaments";
 export type EventSection = "info" | "parking" | "docs";
 export type Route =
   | { name: TabName }
+  | { name: "help" }
   | { name: "event"; id: string; section?: EventSection; from?: TabName };
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -13,6 +14,7 @@ const ID = /^[A-Za-z0-9_-]{1,64}$/;
 export function parseRoute(hash: string): Route {
   const [head = "", id = "", section = ""] = hash.replace(/^#\/?/, "").split("/");
   if (head === "home" || head === "parking" || head === "tournaments") return { name: head };
+  if (head === "help") return { name: "help" };
   if (head === "event" && ID.test(id)) {
     return section === "parking" || section === "docs" ? { name: "event", id, section } : { name: "event", id };
   }
@@ -27,6 +29,7 @@ export function routeToHash(route: Route): string {
 /** 詳細画面を開いているときに、どのタブを選択中として見せるか */
 export function tabOf(route: Route): TabName {
   if (route.name === "event") return route.from ?? (route.section === "parking" ? "parking" : route.section === "docs" ? "tournaments" : "home");
+  if (route.name === "help") return "home";
   return route.name;
 }
 

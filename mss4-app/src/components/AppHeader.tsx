@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { EllipsisVertical, KeyRound, LogOut, ShieldCheck } from "lucide-react";
+import { BookOpen, EllipsisVertical, KeyRound, LogOut, ShieldCheck } from "lucide-react";
 import { EVERYONE_EDITS, TEST_MODE } from "../lib/config";
 import { GRADE_LABELS, type GradeCode, type Role } from "../lib/grade";
 
@@ -9,9 +9,10 @@ interface Props {
   onCoachLogin: () => void;
   onChangePassphrase: () => void;
   onLogout: () => void;
+  onHelp: () => void;
 }
 
-export function AppHeader({ grade, role, onCoachLogin, onChangePassphrase, onLogout }: Props) {
+export function AppHeader({ grade, role, onCoachLogin, onChangePassphrase, onLogout, onHelp }: Props) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const coach = role === "coach";
@@ -39,6 +40,7 @@ export function AppHeader({ grade, role, onCoachLogin, onChangePassphrase, onLog
             <strong className="brand-grade">{GRADE_LABELS[grade]}</strong>
           </span>
         </div>
+        <a className="help-link" href="#help" onClick={(e) => { e.preventDefault(); onHelp(); }}><BookOpen size={16} aria-hidden="true" />使い方</a>
         {!TEST_MODE && !EVERYONE_EDITS && <div className="header-menu" ref={menuRef}>
           <button className="icon-btn" aria-label="メニュー" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
             <EllipsisVertical size={20} />
