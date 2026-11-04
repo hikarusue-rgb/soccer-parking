@@ -797,3 +797,20 @@ body { background: var(--bg); }
 .auto-note.is-soon { color: #92400e; background: #fffbeb; }
 .draw-by { font-size: 12.5px; font-weight: 800; color: var(--muted); }
 .time-select { font-family: var(--num); font-size: 18px; font-weight: 700; }
+
+/* 当番の方：LINEでの連絡 */
+.duty-card { display: grid; gap: 8px; background: #fff; border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow), inset 0 3px 0 #06c755; }
+.duty-card h3 { font-size: 15px; font-weight: 900; color: var(--navy); }
+.duty-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.duty-step { position: relative; display: grid; gap: 2px; justify-items: start; text-align: left; min-height: 64px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: #f7faf9; }
+.duty-step b { font-size: 13.5px; }
+.duty-step small { font-size: 11px; color: var(--muted); font-weight: 700; }
+.duty-step.is-now { border-color: #06c755; background: #effbf3; box-shadow: 0 0 0 2px #06c75533; }
+.duty-step:disabled { opacity: .45; }
+.duty-now { position: absolute; top: -8px; right: 6px; font-size: 10.5px; font-weight: 900; color: #fff; background: #06c755; border-radius: 999px; padding: 0 7px; }
+.share-dialog { background: #fff; padding: 14px; display: grid; gap: 10px; }
+.share-head { display: flex; justify-content: space-between; align-items: center; font-size: 16px; }
+.share-text { font-size: 14px; line-height: 1.55; min-height: 240px; }
+.share-actions { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
+.btn-line { background: #06c755; border-color: #06c755; color: #fff; }
+.btn-line:hover { background: #05b14c; }

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Share2, Undo2 } from "lucide-react";
 import { dateTimeLabel, timeLeft } from "../lib/datetime";
-import { groupMembers, reminderText, resultText, shareText } from "../lib/lineText";
+import { groupMembers } from "../lib/lineText";
 import { lotterySlots, reservedOf, lotteryState, nextDraw, runDraw } from "../lib/lottery";
 import { SaveError, clearLottery, saveEntry, saveLottery } from "../lib/mutations";
 import { useMyMember } from "../lib/myMember";
+import { DutyCard } from "./DutyCard";
 import { applicantsOf } from "../lib/parking";
 import { useTeam } from "../lib/teamContext";
 import type { LotteryLadder, Member, TeamEvent } from "../lib/types";
@@ -64,11 +65,6 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
     }
   }
 
-  async function share(text: string) {
-    const r = await shareText(text);
-    if (r === "copied") setMessage({ kind: "info", text: "コピーしました！LINEに貼り付けてください。" });
-    if (r === "failed") setMessage({ kind: "error", text: "共有できませんでした。" });
-  }
 
   const drawButton = plan && (
     <button className="btn btn-yellow btn-block" onClick={draw} disabled={busy}>
@@ -106,7 +102,7 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
 
       {lottery && (
         <Results event={event} onReplay={lottery.ladder ? () => setReplay({ ladder: lottery.ladder!, autoplay: false }) : undefined}
-          onShare={t.coach ? () => share(resultText(event, t.data.members, entries, lottery, t.eventUrl(event))) : undefined} />
+/>
       )}
 
       {state && state.dropouts.length > 0 && (
@@ -142,11 +138,12 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
 
       <EntryCard event={event} closed={closed} />
 
+      <DutyCard event={event} closed={closed} />
+
       {groups.noReply.length > 0 && (
         <div className="unanswered">
           <div className="unanswered-head">
             <span>📭 未回答 {groups.noReply.length}名</span>
-            <button className="btn btn-small" onClick={() => share(reminderText(event, t.data.members, entries, t.eventUrl(event)))}>📢 催促テキスト</button>
           </div>
           <ul className="member-chips">{groups.noReply.map((m) => <li key={m.id}>#{m.num} {m.name}</li>)}</ul>
         </div>

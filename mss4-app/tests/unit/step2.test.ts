@@ -114,3 +114,21 @@ describe("抽選枠と抽選外枠", () => {
     expect(lotterySlots(ev({ limit: 4, reserved: 1, confirmed: ["a", "b"] }))).toBe(2);
   });
 });
+
+describe("当番の方のLINE文面", () => {
+  it("受付の案内：台数（抽選枠・抽選外枠）・締切・駐車場の画面へのリンク", async () => {
+    const { announceText, reminderText, lineShareUrl } = await import("../../src/lib/lineText.ts");
+    const e = { id: "e1", date: "2026-11-07", title: "TM", venue: "第一カッターフィールド", meeting: "11:30", kickoff: "", start: "12:00", end: "17:00",
+      parking: { mode: "lottery", limit: 4, reserved: 1, confirmed: [], deadlineAt: Date.parse("2026-11-05T08:00:00Z") } } as never;
+    const a = announceText(e, "https://x/#event/e1/parking");
+    expect(a).toContain("🚗 駐車場 4台（抽選枠 3台・抽選外枠 1台（審判など））");
+    expect(a).toContain("⏳ 回答締切：11/5(木) 17:00");
+    expect(a).toContain("⏰ 集合 11:30 ／ 12:00〜17:00");
+    expect(a.endsWith("https://x/#event/e1/parking")).toBe(true);
+    const members = [{ id: "m1", num: 4, name: "はるか", active: true, order: 1 }, { id: "m2", num: 6, name: "えいた", active: true, order: 2 }] as never;
+    const r = reminderText(e, members, { m1: { attending: true, parkingNeeded: true, carpoolCapacity: 0, at: 1 } } as never, "u");
+    expect(r).toContain("📊 回答 1/2名・駐車場希望 1名");
+    expect(r).toContain("#6 えいた");
+    expect(lineShareUrl("あ b")).toBe("https://line.me/R/share?text=%E3%81%82%20b");
+  });
+});

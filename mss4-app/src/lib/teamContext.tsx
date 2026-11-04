@@ -27,7 +27,7 @@ export interface TeamContextValue {
   parkingOf: (e: TeamEvent) => ParkingSummary | null;
   hasDocs: (e: TeamEvent) => boolean;
   /** LINE などで共有する予定の固定URL */
-  eventUrl: (e: TeamEvent) => string;
+  eventUrl: (e: TeamEvent, section?: "parking" | "docs") => string;
 }
 
 const TeamContext = createContext<TeamContextValue | null>(null);
@@ -78,7 +78,7 @@ export function TeamProvider({ grade, role, data, navigate, seen: seenState, chi
           : isRecent(e, now) || isLotteryRecent(data.lotteries[e.id], now) ? "recent" : null,
       parkingOf: (e) => parkingSummary(e, data.entries[e.id], data.lotteries[e.id], now),
       hasDocs,
-      eventUrl: (e) => `${base}#event/${e.id}`,
+      eventUrl: (e, section) => `${base}#event/${e.id}${section ? `/${section}` : ""}`,
     };
   }, [grade, role, coach, data, now, navigate, seen, markSeen, storable]);
 
