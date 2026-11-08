@@ -150,7 +150,7 @@ export function ParkingSection({ event }: { event: TeamEvent }) {
       )}
 
       {t.coach && lottery && (
-        <button className="btn btn-small btn-ghost" onClick={undo} disabled={busy}><Undo2 size={15} aria-hidden="true" />抽選結果を取り消す（コーチ）</button>
+        <button className="btn btn-small btn-ghost" onClick={undo} disabled={busy}><Undo2 size={15} aria-hidden="true" />抽選結果を取り消す</button>
       )}
 
       {message && <p className={`alert ${message.kind === "error" ? "alert-error" : "alert-info"}`} role={message.kind === "error" ? "alert" : "status"}>{message.text}</p>}

@@ -1,18 +1,11 @@
-import { BellRing, Check, ChevronRight } from "lucide-react";
-import { dayLabel, relativeDay, jstToday } from "../lib/datetime";
+import { BellRing, ChevronDown, ChevronRight } from "lucide-react";
+import { dayLabel } from "../lib/datetime";
 import { isInitialOnly, lotteryKey, SHARED_DAYS } from "../lib/seen";
 import { useTeam } from "../lib/teamContext";
 import { summarize, useHistories } from "../lib/updates";
 import type { HistoryItem } from "../lib/changes";
 import type { TeamEvent } from "../lib/types";
 
-const ago = (ms: number, now: number) => {
-  const m = Math.max(0, Math.round((now - ms) / 60_000));
-  if (m < 1) return "たった今";
-  if (m < 60) return `${m}分前`;
-  const h = Math.round(m / 60);
-  return h < 24 ? `${h}時間前` : `${Math.round(h / 24)}日前`;
-};
 
 /**
  * 予定タブのいちばん上：「最近の変更」
@@ -21,7 +14,6 @@ const ago = (ms: number, now: number) => {
  */
 export function UpdatesPanel() {
   const t = useTeam();
-  const today = jstToday(t.now);
   const cutoff = t.now - SHARED_DAYS * 86_400_000;
   const items = t.data.events
     .map((e) => {
@@ -38,9 +30,8 @@ export function UpdatesPanel() {
   const unread = items.filter((x) => x.state === "unread");
   const history = useHistories(t.grade, items.filter((x) => x.changed).map(({ e }) => ({ id: e.id, version: e.version })));
 
-  if (!items.length) {
-    return <p className="updates-none"><Check size={16} aria-hidden="true" />直近{SHARED_DAYS}日間に変わった予定はありません</p>;
-  }
+  // 変わった予定がなければ何も出さない（画面を広く使う）
+  if (!items.length) return null;
 
   const open = (e: TeamEvent, drawnOnly: boolean) =>
     t.navigate({ name: "event", id: e.id, section: drawnOnly ? "parking" : undefined, from: "home" });
@@ -60,46 +51,35 @@ export function UpdatesPanel() {
     return inWindow.length ? Math.min(...inWindow) - 1 : e.version;
   };
 
+  // ふだんは1行にたたんでおく（開くと1件1行の一覧）
   return (
-    <section className={`updates-panel ${unread.length ? "has-unread" : ""}`} aria-labelledby="updates-title">
-      <div className="updates-head">
-        <h2 id="updates-title">
-          <span className="updates-bell"><BellRing size={18} aria-hidden="true" /></span>
-          最近の変更<b>{items.length}</b>件
-          {unread.length > 0 && <span className="unread-pill">未確認 {unread.length}</span>}
-        </h2>
-        {unread.length > 0 && <button className="btn btn-small btn-ghost" onClick={markAll}>すべて確認済み</button>}
-      </div>
-      <p className="updates-note">直近{SHARED_DAYS}日間に変わった予定です（全員に同じものが出ます）。<span className="dot-unread" aria-hidden="true" />オレンジは、この端末でまだ開いていないものです。</p>
-      <ul className="updates-list">
-        {items.map(({ e, state, drawn, drawnNew, changed, at }) => {
+    <details className={`updates-bar ${unread.length ? "has-unread" : ""}`}>
+      <summary>
+        <BellRing size={16} aria-hidden="true" />
+        <span>最近の変更 <b>{items.length}</b>件</span>
+        {unread.length > 0 && <span className="unread-pill">未確認 {unread.length}</span>}
+        <ChevronDown size={16} aria-hidden="true" className="updates-chev" />
+      </summary>
+      <ul className="upd-list">
+        {items.map(({ e, state, drawn, drawnNew, changed }) => {
           const h = changed ? history(e.id, e.version) : [];
           const sum = h ? summarize(h, sinceOf(e, state === "unread", h)) : null;
-          const phrases = [...(drawn ? [{ text: "🎯 駐車場の抽選結果が出ました", tone: "green" as const }] : []), ...(sum?.phrases ?? [])];
-          const isUnread = state === "unread";
+          const phrases = [...(drawn ? ["🎯 抽選結果"] : []), ...(sum?.phrases.map((p) => p.text) ?? [])];
           return (
             <li key={e.id}>
-              <button className={`update-card ${isUnread ? "is-unread" : "is-seen"} ${e.status === "canceled" || e.status === "postponed" ? "is-stop" : ""}`} onClick={() => open(e, drawnNew && !t.isUnread(e))}>
-                <span className="update-when"><b>{dayLabel(e.date)}</b><small>{relativeDay(e.date, today)}</small></span>
-                <span className="update-main">
-                  <span className="update-top">
-                    {isUnread ? <span className="tag-unread">未確認</span> : <span className="tag-seen"><Check size={12} aria-hidden="true" />確認済み</span>}
-                    <b className="update-title">{e.title}</b>
-                  </span>
-                  <span className="update-phrases">
-                    {phrases.length ? phrases.slice(0, 4).map((p) => <span key={p.text} className={`phrase tone-${p.tone}`}>{p.text}</span>)
-                      : <span className="phrase tone-plain">{!sum ? "読み込み中…" : h && h.length ? "↩ 変更後、元に戻りました" : "内容が変わりました"}</span>}
-                    {phrases.length > 4 && <span className="phrase tone-plain">ほか{phrases.length - 4}件</span>}
-                  </span>
-                  <small className="update-ago">更新：{ago(at, t.now)}{e.updatedBy === "HP自動更新" && "（クラブHPから自動反映）"}</small>
-                </span>
-                <ChevronRight size={18} aria-hidden="true" />
+              <button className={`upd-row ${state === "unread" ? "is-unread" : ""}`} onClick={() => open(e, drawnNew && !t.isUnread(e))}>
+                <span className="upd-date">{dayLabel(e.date)}</span>
+                <span className="upd-main"><b>{e.title}</b><small>{phrases.length ? phrases.slice(0, 2).join("・") + (phrases.length > 2 ? ` ほか${phrases.length - 2}` : "") : sum ? "内容が変わりました" : "…"}</small></span>
+                <ChevronRight size={16} aria-hidden="true" />
               </button>
             </li>
           );
         })}
       </ul>
-      {!t.seenStorable && <small className="muted">この端末では確認の記録を保存できないため、画面を閉じるまで有効です。</small>}
-    </section>
+      <div className="upd-foot">
+        <small className="muted">直近{SHARED_DAYS}日間に変わった予定（オレンジ＝まだ開いていないもの）</small>
+        {unread.length > 0 && <button className="btn btn-small btn-ghost" onClick={markAll}>すべて確認済み</button>}
+      </div>
+    </details>
   );
 }

@@ -52,13 +52,14 @@ export function ChangeHistory({ event, showLog = true }: { event: TeamEvent; sho
 
   return (
     <>
+      {/* 未確認のときだけ開いておく。見たあとの「最近の変更」は1行にたたむ */}
       {changed && !(empty && !unread) && (
-        <section className={`whats-new ${unread ? "is-unread" : "is-recent"}`} aria-label={unread ? "前回から変わったところ" : "最近の変更"}>
-          <p className="whats-new-head">
-            {unread ? <BellRing size={17} aria-hidden="true" /> : <span aria-hidden="true">✏️</span>}
+        <details className={`whats-new ${unread ? "is-unread" : "is-recent"}`} open={unread} aria-label={unread ? "前回から変わったところ" : "最近の変更"}>
+          <summary className="whats-new-head">
+            {unread ? <BellRing size={16} aria-hidden="true" /> : <span aria-hidden="true">✏️</span>}
             {unread ? "前回から変わったところ" : `最近の変更（直近${SHARED_DAYS}日間）`}
             <small>{dateTimeLabel(event.updatedAt)}{event.updatedBy === "HP自動更新" && "・クラブHPから"}</small>
-          </p>
+          </summary>
           {!sum && !error && <p className="muted">読み込み中…</p>}
           {sum?.added && <p className="whats-new-added">🆕 新しく追加された予定です</p>}
           {sum && sum.changes.length > 0 && (
@@ -74,7 +75,7 @@ export function ChangeHistory({ event, showLog = true }: { event: TeamEvent; sho
             </ul>
           )}
           {empty && <p className="muted">表示できる変更はありません。</p>}
-        </section>
+        </details>
       )}
       {showLog && <section className="change-callout" aria-label="変更履歴">
         <div className="change-summary">

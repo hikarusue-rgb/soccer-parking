@@ -832,3 +832,30 @@ body { background: var(--bg); }
 .help-steps ol { margin: 4px 0; padding-left: 1.3em; }
 .help-faq { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; list-style: disc; }
 .help-note { display: block; margin-top: 4px; font-size: 13px; color: var(--alert-dark); font-weight: 700; }
+
+/* 最近の変更：ふだんは1行にたたむ */
+.updates-bar { background: #fff; border-radius: 14px; box-shadow: var(--shadow), inset 0 0 0 1px #dfe5f3; }
+.updates-bar.has-unread { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--alert); }
+.updates-bar summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px; cursor: pointer; list-style: none; font-size: 14px; font-weight: 800; color: var(--recent); }
+.updates-bar.has-unread summary { color: var(--alert-dark); }
+.updates-bar summary::-webkit-details-marker { display: none; }
+.updates-bar summary b { font-family: var(--num); font-size: 18px; }
+.updates-bar .unread-pill { margin-left: 0; }
+.updates-chev { margin-left: auto; color: var(--muted); transition: transform .15s ease; }
+.updates-bar[open] .updates-chev { transform: rotate(180deg); }
+.upd-list { display: grid; gap: 4px; padding: 0 8px 6px; }
+.upd-row { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; text-align: left; border: 0; background: #f6f8fb; border-radius: 10px; padding: 7px 10px; }
+.upd-row.is-unread { background: var(--alert-bg); box-shadow: inset 3px 0 0 var(--alert); }
+.upd-date { font-family: var(--num); font-size: 15px; font-weight: 800; white-space: nowrap; }
+.upd-main { display: grid; min-width: 0; line-height: 1.3; }
+.upd-main b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upd-main small { font-size: 11.5px; color: var(--muted); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upd-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px 8px; }
+
+/* 予定の画面の変更表示をコンパクトに */
+.whats-new { padding: 10px 12px; gap: 8px; }
+.whats-new > summary { list-style: none; cursor: pointer; font-size: 14px; }
+.whats-new > summary::-webkit-details-marker { display: none; }
+.whats-new:not([open]) { box-shadow: var(--shadow), inset 0 0 0 1px #dfe5f3; }
+.whats-new-list li { padding: 6px 10px; }
+.wn-after { font-size: 15px; }

@@ -32,7 +32,7 @@ export function ParkingView() {
           <h1 className="page-title">駐車場の抽選</h1>
         </div>
       </section>
-      <p className="lead">予定をタップ → お子さんの名前を選ぶ → 参加・駐車場の希望を回答。締切後にコーチが抽選します。</p>
+      <p className="lead">試合をタップ → お子さんの名前を選ぶ → 参加・駐車場の希望を回答。締切を過ぎると自動で抽選します。</p>
 
       <section aria-labelledby="this-week">
         <h2 id="this-week" className="week-title">🌟 今週（{md(g.thisWeek.from)}〜{md(g.thisWeek.to)}）</h2>
